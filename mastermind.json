@@ -1,0 +1,20 @@
+{
+  "events": [
+    {
+      "type": "OrderCreated",
+      "handler": "handlers/OrderCreated/handler.ts"
+    },
+    {
+      "type": "OrderCanceled",
+      "handler": "handlers/OrderCanceled/handler.ts"
+    },
+    {
+      "type": "PaymentRequested",
+      "handler": "handlers/PaymentRequested/handler.ts"
+    },
+    {
+      "type": "PaymentCompleted",
+      "handler": "handlers/PaymentCompleted/handler.ts"
+    }
+  ]
+}

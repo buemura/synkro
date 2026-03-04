@@ -1,0 +1,27 @@
+{
+  "name": "mastermind",
+  "version": "1.0.0",
+  "description": "Mastermind is a orchestrator app with easy configuration of event driven architectures. Similar to AWS step functions, state machines, and temporal workflows, but with a focus on simplicity and ease of use. It allows you to define your workflows in a simple YAML format, and then execute them with a single command.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.cjs --log-override:empty-import-meta=silent",
+    "start": "node dist/index.cjs",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.1",
+    "ioredis": "^5.10.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.3.3",
+    "esbuild": "^0.27.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
