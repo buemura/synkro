@@ -1,8 +1,8 @@
 import {
   Inject,
   Injectable,
-  OnModuleDestroy,
-  OnModuleInit,
+  type OnModuleDestroy,
+  type OnModuleInit,
 } from "@nestjs/common";
 import { Synkro } from "@synkro/core";
 import type {
@@ -46,7 +46,7 @@ export class SynkroService implements OnModuleInit, OnModuleDestroy {
 
     const synkroOptions: SynkroOptions = {
       transport: this.options.transport,
-      redisUrl: this.options.redisUrl,
+      connectionUrl: this.options.connectionUrl,
       debug: this.options.debug,
       workflows,
     };

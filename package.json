@@ -1,0 +1,9 @@
+{
+  "name": "synkro",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter './packages/*' run build",
+    "test": "pnpm --filter './packages/*' run test",
+    "type-check": "pnpm --filter './packages/*' run type-check"
+  }
+}

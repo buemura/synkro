@@ -30,7 +30,7 @@ describe("Synkro", () => {
   describe("start", () => {
     it("should create an instance with minimal options", async () => {
       const instance = await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
       });
       expect(instance).toBeInstanceOf(Synkro);
     });
@@ -38,7 +38,7 @@ describe("Synkro", () => {
     it("should register events provided in options", async () => {
       const handler = vi.fn();
       await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
         events: [{ type: "user:created", handler }],
       });
 
@@ -48,7 +48,7 @@ describe("Synkro", () => {
     it("should register workflows provided in options", async () => {
       const handler = vi.fn();
       await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
         workflows: [
           {
             name: "my-workflow",
@@ -65,7 +65,7 @@ describe("Synkro", () => {
   describe("on", () => {
     it("should register a handler at runtime", async () => {
       const instance = await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
       });
 
       const handler = vi.fn();
@@ -78,7 +78,7 @@ describe("Synkro", () => {
   describe("publish", () => {
     it("should publish an event with a generated requestId", async () => {
       const instance = await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
       });
 
       const requestId = await instance.publish("user:created", {
@@ -95,7 +95,7 @@ describe("Synkro", () => {
 
     it("should use a custom requestId when provided", async () => {
       const instance = await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
       });
 
       const requestId = await instance.publish(
@@ -116,7 +116,7 @@ describe("Synkro", () => {
     it("should start a workflow when event matches a workflow name", async () => {
       const handler = vi.fn();
       const instance = await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
         workflows: [
           {
             name: "order-flow",
@@ -141,7 +141,7 @@ describe("Synkro", () => {
 
     it("should publish as a regular event when no workflow matches", async () => {
       const instance = await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
       });
 
       await instance.publish("some:event", { data: 1 });
@@ -156,7 +156,7 @@ describe("Synkro", () => {
   describe("stop", () => {
     it("should disconnect all Redis clients", async () => {
       const instance = await Synkro.start({
-        redisUrl: "redis://localhost:6379",
+        connectionUrl: "redis://localhost:6379",
       });
 
       await instance.stop();

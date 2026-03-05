@@ -2,7 +2,7 @@ import type { SynkroWorkflow } from "@synkro/core";
 
 export interface SynkroModuleOptions {
   transport: "redis" | "in-memory";
-  redisUrl?: string;
+  connectionUrl?: string;
   debug?: boolean;
   workflows?: SynkroWorkflow[];
 }

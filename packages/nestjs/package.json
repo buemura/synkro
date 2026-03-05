@@ -46,7 +46,7 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/testing": "^11.1.15",
     "@swc/core": "^1.15.18",
-    "@synkro/core": "file:../core",
+    "@synkro/core": "workspace:*",
     "ioredis": "^5.10.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",

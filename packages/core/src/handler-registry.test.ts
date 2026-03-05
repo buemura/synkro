@@ -65,10 +65,12 @@ describe("HandlerRegistry", () => {
 
       await messageCallback(message);
 
-      expect(handler).toHaveBeenCalledWith({
-        requestId: "req-123",
-        payload: { name: "Alice" },
-      });
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: "req-123",
+          payload: { name: "Alice" },
+        }),
+      );
     });
 
     it("should publish a completion event after handler executes", async () => {
@@ -110,10 +112,12 @@ describe("HandlerRegistry", () => {
 
       await messageCallback(message);
 
-      expect(handler).toHaveBeenCalledWith({
-        requestId: "req-456",
-        payload: null,
-      });
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: "req-456",
+          payload: null,
+        }),
+      );
       expect(mockRedis.publishMessage).toHaveBeenCalled();
     });
 

@@ -32,10 +32,10 @@ export class Synkro {
     if (options.transport === "in-memory") {
       transport = new InMemoryManager();
     } else {
-      if (!options.redisUrl) {
-        throw new Error("redisUrl is required when using Redis transport");
+      if (!options.connectionUrl) {
+        throw new Error("connectionUrl is required when using Redis transport");
       }
-      transport = new RedisManager(options.redisUrl);
+      transport = new RedisManager(options.connectionUrl);
     }
 
     const instance = new Synkro(transport);

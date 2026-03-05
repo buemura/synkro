@@ -34,7 +34,7 @@ SynkroModule.forRootAsync({
   inject: [ConfigService],
   useFactory: (config: ConfigService) => ({
     transport: "redis",
-    redisUrl: config.get("REDIS_URL"),
+    connectionUrl: config.get("REDIS_URL"),
   }),
 });
 ```

@@ -1,4 +1,4 @@
-import { DynamicModule, Module } from "@nestjs/common";
+import { type DynamicModule, Module } from "@nestjs/common";
 import { DiscoveryModule } from "@nestjs/core";
 
 import { SYNKRO_MODULE_OPTIONS } from "./synkro.constants.js";

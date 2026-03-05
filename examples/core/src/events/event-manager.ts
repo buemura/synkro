@@ -118,7 +118,7 @@ export async function eventManagerSetup(): Promise<Synkro> {
 
   synkro = await Synkro.start({
     transport: "redis",
-    redisUrl: process.env.REDIS_URL! || "redis://localhost:6379",
+    connectionUrl: process.env.REDIS_URL! || "redis://localhost:6379",
     debug: true,
     events,
     workflows,

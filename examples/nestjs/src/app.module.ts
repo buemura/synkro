@@ -7,7 +7,7 @@ import { OrderModule } from "./order/order.module.js";
   imports: [
     SynkroModule.forRoot({
       transport: "redis",
-      redisUrl: "redis://localhost:6379",
+      connectionUrl: "redis://localhost:6379",
       debug: true,
       workflows: orderWorkflows,
     }),

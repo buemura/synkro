@@ -50,7 +50,7 @@ import { Synkro } from "@synkro/core";
 
 const synkro = await Synkro.start({
   transport: "redis",
-  redisUrl: "redis://localhost:6379",
+  connectionUrl: "redis://localhost:6379",
   events: [
     {
       type: "UserSignedUp",
@@ -73,7 +73,7 @@ Define multi-step sequential workflows. Each step runs after the previous one co
 ```ts
 const synkro = await Synkro.start({
   transport: "redis",
-  redisUrl: "redis://localhost:6379",
+  connectionUrl: "redis://localhost:6379",
   workflows: [
     {
       name: "ProcessOrder",
@@ -221,7 +221,7 @@ Creates and returns a running instance.
 ```ts
 type SynkroOptions = {
   transport: "redis" | "in-memory";
-  redisUrl?: string; // required when transport is "redis"
+  connectionUrl?: string; // required for external transports (e.g. Redis)
   debug?: boolean;
   events?: SynkroEvent[];
   workflows?: SynkroWorkflow[];
