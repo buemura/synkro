@@ -111,7 +111,7 @@ describe("WorkflowRegistry", () => {
       });
 
       expect(mockRedis.setCache).toHaveBeenCalledWith(
-        "workflow:state:req-1",
+        "workflow:state:req-1:order-processing",
         JSON.stringify({
           workflowName: "order-processing",
           currentStep: 0,
@@ -164,7 +164,7 @@ describe("WorkflowRegistry", () => {
 
       // Should save updated state
       expect(mockRedis.setCache).toHaveBeenCalledWith(
-        "workflow:state:req-1",
+        "workflow:state:req-1:order-processing",
         JSON.stringify({
           workflowName: "order-processing",
           currentStep: 1,
@@ -207,7 +207,7 @@ describe("WorkflowRegistry", () => {
       await flushPromises();
 
       expect(mockRedis.setCache).toHaveBeenCalledWith(
-        "workflow:state:req-1",
+        "workflow:state:req-1:order-processing",
         JSON.stringify({
           workflowName: "order-processing",
           currentStep: 2,
@@ -338,7 +338,7 @@ describe("WorkflowRegistry", () => {
 
       // Should save state with step 1
       expect(mockRedis.setCache).toHaveBeenCalledWith(
-        "workflow:state:req-1",
+        "workflow:state:req-1:doc-processing",
         JSON.stringify({
           workflowName: "doc-processing",
           currentStep: 1,
@@ -378,7 +378,7 @@ describe("WorkflowRegistry", () => {
       );
 
       expect(mockRedis.setCache).toHaveBeenCalledWith(
-        "workflow:state:req-1",
+        "workflow:state:req-1:doc-processing",
         JSON.stringify({
           workflowName: "doc-processing",
           currentStep: 2,
@@ -419,7 +419,7 @@ describe("WorkflowRegistry", () => {
 
       // Should mark as failed, not advance
       expect(mockRedis.setCache).toHaveBeenCalledWith(
-        "workflow:state:req-1",
+        "workflow:state:req-1:simple-workflow",
         JSON.stringify({
           workflowName: "simple-workflow",
           currentStep: 0,
@@ -458,7 +458,7 @@ describe("WorkflowRegistry", () => {
 
       // Should mark as completed, NOT advance to ProcessingFailed
       expect(mockRedis.setCache).toHaveBeenCalledWith(
-        "workflow:state:req-1",
+        "workflow:state:req-1:doc-processing",
         JSON.stringify({
           workflowName: "doc-processing",
           currentStep: 1,
@@ -514,7 +514,7 @@ describe("WorkflowRegistry", () => {
       );
 
       expect(mockRedis.setCache).toHaveBeenCalledWith(
-        "workflow:state:req-1",
+        "workflow:state:req-1:order-flow",
         JSON.stringify({
           workflowName: "order-flow",
           currentStep: 3,

@@ -92,6 +92,10 @@ class InMemoryStore {
     ];
   }
 
+  findAllProducts(): Product[] {
+    return this.products;
+  }
+
   insertOrder(data: {
     productId: string;
     quantity: number;

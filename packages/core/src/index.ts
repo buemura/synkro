@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 
 import { HandlerRegistry } from "./handler-registry.js";
+import {
+  discoverEventHandlers,
+  discoverWorkflowStepHandlers,
+} from "./handler-discovery.js";
 import { InMemoryManager } from "./in-memory.js";
 import { setDebug } from "./logger.js";
 import { RedisManager } from "./redis.js";
@@ -12,6 +16,7 @@ import type {
   RetryConfig,
   SynkroIntrospection,
   SynkroOptions,
+  SynkroWorkflow,
 } from "./types.js";
 import type { TransportManager } from "./transport.js";
 
@@ -42,17 +47,41 @@ export class Synkro {
 
     const instance = new Synkro(transport);
 
+    // Patch decorated workflow step handlers before registering workflows
+    const workflows = options.workflows
+      ? instance.patchWorkflowHandlers(options.workflows, options.handlers ?? [])
+      : [];
+
     if (options.events) {
       for (const event of options.events) {
         instance.on(event.type, event.handler, event.retry);
       }
     }
 
-    if (options.workflows) {
-      instance.workflowRegistry.registerWorkflows(options.workflows);
+    if (workflows.length > 0) {
+      instance.workflowRegistry.registerWorkflows(workflows);
+    }
+
+    // Register decorated event handlers
+    for (const handlerInstance of options.handlers ?? []) {
+      for (const { eventType, handler, retry } of discoverEventHandlers(handlerInstance)) {
+        instance.on(eventType, handler, retry);
+      }
     }
 
     return instance;
+  }
+
+  register(...instances: object[]): void {
+    for (const instance of instances) {
+      for (const { eventType, handler, retry } of discoverEventHandlers(instance)) {
+        this.on(eventType, handler, retry);
+      }
+
+      for (const { workflowName, stepType, handler } of discoverWorkflowStepHandlers(instance)) {
+        this.workflowRegistry.registerStepHandler(workflowName, stepType, handler);
+      }
+    }
   }
 
   on(eventType: string, handler: HandlerFunction, retry?: RetryConfig): void {
@@ -92,8 +121,38 @@ export class Synkro {
   async stop(): Promise<void> {
     await this.transport.disconnect();
   }
+
+  private patchWorkflowHandlers(
+    workflows: SynkroWorkflow[],
+    handlerInstances: object[],
+  ): SynkroWorkflow[] {
+    // Collect all decorated workflow step handlers
+    const stepHandlers = handlerInstances.flatMap((instance) =>
+      discoverWorkflowStepHandlers(instance),
+    );
+
+    return workflows.map((w) => ({
+      ...w,
+      steps: w.steps.map((s) => {
+        if (s.handler) return s;
+
+        const discovered = stepHandlers.find(
+          (h) => h.workflowName === w.name && h.stepType === s.type,
+        );
+
+        if (!discovered) {
+          throw new Error(
+            `Workflow "${w.name}" step "${s.type}" has no handler. Provide an inline handler or use the @OnWorkflowStep decorator.`,
+          );
+        }
+
+        return { ...s, handler: discovered.handler };
+      }),
+    }));
+  }
 }
 
+export { OnEvent, OnWorkflowStep } from "./decorators.js";
 export type { TransportManager } from "./transport.js";
 export type {
   EventInfo,

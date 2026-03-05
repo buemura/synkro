@@ -11,6 +11,11 @@ const PORT = 3000;
 
 app.use(express.json());
 
+app.get("/products", async (req: Request, res: Response) => {
+  const products = db.findAllProducts();
+  res.status(200).json(products);
+});
+
 app.get("/orders", async (req: Request, res: Response) => {
   const orders = db.findAllOrders();
   res.status(200).json(orders);

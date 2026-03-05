@@ -10,7 +10,7 @@ export type SynkroEvent = {
 
 export type SynkroWorkflowStep = {
   type: string;
-  handler: HandlerFunction;
+  handler?: HandlerFunction;
   retry?: RetryConfig;
   onSuccess?: string;
   onFailure?: string;
@@ -30,6 +30,7 @@ export type SynkroOptions = {
   debug?: boolean;
   events?: SynkroEvent[];
   workflows?: SynkroWorkflow[];
+  handlers?: object[];
 };
 
 export type PublishFunction = (

@@ -1,42 +1,18 @@
-import { Synkro, SynkroEvent, SynkroWorkflow } from "@synkro/core";
+import { Synkro, type SynkroEvent, type SynkroWorkflow } from "@synkro/core";
 
-import { paymentCompletedHandler } from "../handlers/payment-completed";
-import { paymentFailedHandler } from "../handlers/payment-failed";
-import { paymentRequestedHandler } from "../handlers/payment-requested";
-import { shippingRequestedHandler } from "../handlers/shipping-requested";
+import { OrderEventHandler } from "../handlers/order-event.handler";
+import { OrderWorkflowHandler } from "../handlers/order-workflow.handler";
+import { ShipmentWorkflowHandler } from "../handlers/shipment-workflow.handler";
 import { stockUpdateHandler } from "../handlers/stock-update";
 import { EventTypes, WorkflowTypes } from "./event-types";
 
 let synkro: Synkro | null = null;
 
+// Inline event handlers (traditional approach — still supported)
 const events: SynkroEvent[] = [
   {
-    type: EventTypes.OrderCreated,
-    handler: async ({ requestId, payload }) => {
-      console.log(
-        `[Event Handler] - Handling OrderCreated for request ${requestId}`,
-      );
-      // Simulate some processing logic
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    },
-    retry: { maxRetries: 3 },
-  },
-  {
-    type: EventTypes.StockUpdate,
-    handler: async ({ requestId, payload }) => {
-      console.log(
-        `[Event Handler] - Handling StockUpdate for request ${requestId}`,
-      );
-
-      throw new Error("Simulated failure in StockUpdate handler");
-      // Simulate some processing logic
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    },
-    retry: { maxRetries: 2 },
-  },
-  {
     type: "test-event",
-    handler: async ({ requestId, payload }) => {
+    handler: async ({ requestId }) => {
       console.log(
         `[Event Handler] - Handling test-event for request ${requestId}`,
       );
@@ -44,7 +20,7 @@ const events: SynkroEvent[] = [
   },
   {
     type: "test-event-2",
-    handler: async ({ requestId, payload }) => {
+    handler: async ({ requestId }) => {
       console.log(
         `[Event Handler] - Handling test-event-2 for request ${requestId}`,
       );
@@ -52,7 +28,7 @@ const events: SynkroEvent[] = [
   },
   {
     type: "test-event-3",
-    handler: async ({ requestId, payload }) => {
+    handler: async ({ requestId }) => {
       console.log(
         `[Event Handler] - Handling test-event for request ${requestId}`,
       );
@@ -60,26 +36,15 @@ const events: SynkroEvent[] = [
   },
   {
     type: "test-event-4",
-    handler: async ({ requestId, payload }) => {
+    handler: async ({ requestId }) => {
       console.log(
         `[Event Handler] - Handling test-event for request ${requestId}`,
       );
     },
   },
-  {
-    type: "IndependentEvent",
-    handler: async ({ requestId, payload }) => {
-      console.log(
-        `[Event Handler] - Handling IndependentEvent for request ${requestId}`,
-      );
-
-      // Simulate some processing logic
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    },
-    retry: { maxRetries: 2 },
-  },
 ];
 
+// Workflow definitions — handlers come from decorated classes via `handlers` option
 const workflows: SynkroWorkflow[] = [
   {
     name: WorkflowTypes.ProcessOrder,
@@ -92,26 +57,23 @@ const workflows: SynkroWorkflow[] = [
       },
       {
         type: EventTypes.PaymentRequested,
-        handler: paymentRequestedHandler,
         retry: { maxRetries: 3 },
         onSuccess: EventTypes.PaymentCompleted,
         onFailure: EventTypes.PaymentFailed,
       },
       {
         type: EventTypes.PaymentCompleted,
-        handler: paymentCompletedHandler,
       },
       {
         type: EventTypes.PaymentFailed,
-        handler: paymentFailedHandler,
       },
       {
+        // Inline handler in a workflow step (mixed approach)
         type: "TestEvent",
-        handler: async ({ requestId, payload }) => {
+        handler: async ({ requestId }) => {
           console.log(
             `[Event Handler] - Handling TestEvent for request ${requestId} that runs independently of the workflow's success or failure`,
           );
-          // Simulate some processing logic
           await new Promise((resolve) => setTimeout(resolve, 100));
         },
       },
@@ -122,7 +84,6 @@ const workflows: SynkroWorkflow[] = [
     steps: [
       {
         type: EventTypes.ShippingRequested,
-        handler: shippingRequestedHandler,
       },
     ],
   },
@@ -131,15 +92,6 @@ const workflows: SynkroWorkflow[] = [
     steps: [
       {
         type: EventTypes.NotifyCustomer,
-        handler: async ({ requestId, payload }) => {
-          const { orderId } = payload as { orderId: string };
-
-          console.log(
-            `[Event Handler] - Handling NotifyCustomer for request ${requestId} order ${orderId}`,
-          );
-          // Simulate some processing logic
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        },
       },
     ],
   },
@@ -148,11 +100,10 @@ const workflows: SynkroWorkflow[] = [
     steps: [
       {
         type: "IndependentEvent",
-        handler: async ({ requestId, payload }) => {
+        handler: async ({ requestId }) => {
           console.log(
-            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow2 for request ${requestId} that runs independently of the workflow's success or failure`,
+            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow2 for request ${requestId}`,
           );
-          // Simulate some processing logic
           await new Promise((resolve) => setTimeout(resolve, 100));
         },
       },
@@ -163,11 +114,10 @@ const workflows: SynkroWorkflow[] = [
     steps: [
       {
         type: "IndependentEvent",
-        handler: async ({ requestId, payload }) => {
+        handler: async ({ requestId }) => {
           console.log(
-            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow2 for request ${requestId} that runs independently of the workflow's success or failure`,
+            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow3 for request ${requestId}`,
           );
-          // Simulate some processing logic
           await new Promise((resolve) => setTimeout(resolve, 100));
         },
       },
@@ -178,11 +128,10 @@ const workflows: SynkroWorkflow[] = [
     steps: [
       {
         type: "IndependentEvent",
-        handler: async ({ requestId, payload }) => {
+        handler: async ({ requestId }) => {
           console.log(
-            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow2 for request ${requestId} that runs independently of the workflow's success or failure`,
+            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow4 for request ${requestId}`,
           );
-          // Simulate some processing logic
           await new Promise((resolve) => setTimeout(resolve, 100));
         },
       },
@@ -199,6 +148,12 @@ export async function eventManagerSetup(): Promise<Synkro> {
     debug: true,
     events,
     workflows,
+    // Decorator-based handlers — classes with @OnEvent and @OnWorkflowStep
+    handlers: [
+      new OrderEventHandler(),
+      new OrderWorkflowHandler(),
+      new ShipmentWorkflowHandler(),
+    ],
   });
 
   return synkro;
