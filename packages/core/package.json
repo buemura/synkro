@@ -1,6 +1,6 @@
 {
   "name": "@synkro/core",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Lightweight workflow and state machine orchestrator powered by Redis. Define event-driven workflows via configuration or code.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

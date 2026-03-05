@@ -17,6 +17,7 @@ type HandlerEntry = {
 
 export class HandlerRegistry {
   private handlers = new Map<string, HandlerEntry>();
+  private processingLocks = new Set<string>();
 
   private publishFn: PublishFunction | null = null;
 
@@ -74,62 +75,73 @@ export class HandlerRegistry {
     }
 
     const event = JSON.parse(message) as { requestId: string; payload: unknown };
+
+    const lockKey = `${event.requestId}:${eventType}`;
+    if (this.processingLocks.has(lockKey)) {
+      return;
+    }
+    this.processingLocks.add(lockKey);
+
     const maxRetries = entry.retry?.maxRetries ?? 0;
     const trackMetrics = !eventType.startsWith("workflow:");
 
-    if (trackMetrics) {
-      await this.redis.incrementCache(`synkro:metrics:${eventType}:received`);
-    }
+    try {
+      if (trackMetrics) {
+        await this.redis.incrementCache(`synkro:metrics:${eventType}:received`);
+      }
 
-    const ctx: HandlerCtx = {
-      requestId: event.requestId,
-      payload: event.payload,
-      publish: this.publishFn!,
-      setPayload(data: Record<string, unknown>) {
-        ctx.payload =
-          typeof ctx.payload === "object" && ctx.payload !== null
-            ? { ...ctx.payload, ...data }
-            : data;
-      },
-    };
+      const ctx: HandlerCtx = {
+        requestId: event.requestId,
+        payload: event.payload,
+        publish: this.publishFn!,
+        setPayload(data: Record<string, unknown>) {
+          ctx.payload =
+            typeof ctx.payload === "object" && ctx.payload !== null
+              ? { ...ctx.payload, ...data }
+              : data;
+        },
+      };
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        await entry.handler(ctx);
-
-        if (trackMetrics) {
-          await this.redis.incrementCache(`synkro:metrics:${eventType}:completed`);
-        }
-        this.redis.publishMessage(
-          `event:${eventType}:completed`,
-          JSON.stringify({
-            requestId: ctx.requestId,
-            payload: ctx.payload,
-          }),
-        );
-        return;
-      } catch (error) {
-        if (attempt < maxRetries) {
-          logger.warn(
-            `[HandlerRegistry] - Handler "${eventType}" failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying...`,
-          );
-        } else {
-          logger.error(
-            `[HandlerRegistry] - Handler "${eventType}" failed after ${maxRetries + 1} attempt(s): ${error}`,
-          );
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          await entry.handler(ctx);
 
           if (trackMetrics) {
-            await this.redis.incrementCache(`synkro:metrics:${eventType}:failed`);
+            await this.redis.incrementCache(`synkro:metrics:${eventType}:completed`);
           }
           this.redis.publishMessage(
-            `event:${eventType}:failed`,
+            `event:${eventType}:completed`,
             JSON.stringify({
               requestId: ctx.requestId,
               payload: ctx.payload,
             }),
           );
+          return;
+        } catch (error) {
+          if (attempt < maxRetries) {
+            logger.warn(
+              `[HandlerRegistry] - Handler "${eventType}" failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying...`,
+            );
+          } else {
+            logger.error(
+              `[HandlerRegistry] - Handler "${eventType}" failed after ${maxRetries + 1} attempt(s): ${error}`,
+            );
+
+            if (trackMetrics) {
+              await this.redis.incrementCache(`synkro:metrics:${eventType}:failed`);
+            }
+            this.redis.publishMessage(
+              `event:${eventType}:failed`,
+              JSON.stringify({
+                requestId: ctx.requestId,
+                payload: ctx.payload,
+              }),
+            );
+          }
         }
       }
+    } finally {
+      this.processingLocks.delete(lockKey);
     }
   }
 }

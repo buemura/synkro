@@ -17,6 +17,7 @@ export class WorkflowRegistry {
     string,
     { workflow: SynkroWorkflow; stepIndex: number }[]
   >();
+  private processingLocks = new Set<string>();
 
   constructor(
     private redis: TransportManager,
@@ -135,47 +136,57 @@ export class WorkflowRegistry {
       payload: unknown;
     };
 
-    const state = await this.getState(requestId);
-    if (!state || state.workflowName !== workflow.name) {
+    const lockKey = `${requestId}:${workflow.name}:completion:${stepIndex}`;
+    if (this.processingLocks.has(lockKey)) {
       return;
     }
+    this.processingLocks.add(lockKey);
 
-    if (state.currentStep !== stepIndex) {
-      logger.warn(
-        `[WorkflowRegistry] - Step mismatch for "${workflow.name}" (requestId: ${requestId}): expected step ${state.currentStep}, got ${stepIndex}`,
-      );
-      return;
-    }
+    try {
+      const state = await this.getState(requestId);
+      if (!state || state.workflowName !== workflow.name) {
+        return;
+      }
 
-    const currentStep = workflow.steps[stepIndex]!;
-    const onSuccess = currentStep.onSuccess;
-
-    if (onSuccess) {
-      const targetIndex = this.findStepIndex(workflow, onSuccess);
-      if (targetIndex === -1) {
-        logger.error(
-          `[WorkflowRegistry] - onSuccess target "${onSuccess}" not found in workflow "${workflow.name}"`,
+      if (state.currentStep !== stepIndex) {
+        logger.warn(
+          `[WorkflowRegistry] - Step mismatch for "${workflow.name}" (requestId: ${requestId}): expected step ${state.currentStep}, got ${stepIndex}`,
         );
         return;
       }
-      await this.routeToStep(workflow, requestId, targetIndex, payload);
-      return;
+
+      const currentStep = workflow.steps[stepIndex]!;
+      const onSuccess = currentStep.onSuccess;
+
+      if (onSuccess) {
+        const targetIndex = this.findStepIndex(workflow, onSuccess);
+        if (targetIndex === -1) {
+          logger.error(
+            `[WorkflowRegistry] - onSuccess target "${onSuccess}" not found in workflow "${workflow.name}"`,
+          );
+          return;
+        }
+        await this.routeToStep(workflow, requestId, targetIndex, payload);
+        return;
+      }
+
+      const nextStepIndex = this.findNextStep(workflow, stepIndex);
+
+      if (nextStepIndex === -1) {
+        state.status = "completed";
+        state.currentStep = stepIndex;
+        await this.saveState(requestId, state);
+        logger.debug(
+          `[WorkflowRegistry] - Workflow "${workflow.name}" completed (requestId: ${requestId})`,
+        );
+        await this.triggerNextWorkflows(workflow, "completed", requestId, payload);
+        return;
+      }
+
+      await this.routeToStep(workflow, requestId, nextStepIndex, payload);
+    } finally {
+      this.processingLocks.delete(lockKey);
     }
-
-    const nextStepIndex = this.findNextStep(workflow, stepIndex);
-
-    if (nextStepIndex === -1) {
-      state.status = "completed";
-      state.currentStep = stepIndex;
-      await this.saveState(requestId, state);
-      logger.debug(
-        `[WorkflowRegistry] - Workflow "${workflow.name}" completed (requestId: ${requestId})`,
-      );
-      await this.triggerNextWorkflows(workflow, "completed", requestId, payload);
-      return;
-    }
-
-    await this.routeToStep(workflow, requestId, nextStepIndex, payload);
   }
 
   private async handleStepFailure(
@@ -188,39 +199,49 @@ export class WorkflowRegistry {
       payload: unknown;
     };
 
-    const state = await this.getState(requestId);
-    if (!state || state.workflowName !== workflow.name) {
+    const lockKey = `${requestId}:${workflow.name}:failure:${stepIndex}`;
+    if (this.processingLocks.has(lockKey)) {
       return;
     }
+    this.processingLocks.add(lockKey);
 
-    if (state.currentStep !== stepIndex) {
-      logger.warn(
-        `[WorkflowRegistry] - Step mismatch for "${workflow.name}" (requestId: ${requestId}): expected step ${state.currentStep}, got ${stepIndex}`,
-      );
-      return;
-    }
+    try {
+      const state = await this.getState(requestId);
+      if (!state || state.workflowName !== workflow.name) {
+        return;
+      }
 
-    const currentStep = workflow.steps[stepIndex]!;
-    const onFailure = currentStep.onFailure;
-
-    if (onFailure) {
-      const targetIndex = this.findStepIndex(workflow, onFailure);
-      if (targetIndex === -1) {
-        logger.error(
-          `[WorkflowRegistry] - onFailure target "${onFailure}" not found in workflow "${workflow.name}"`,
+      if (state.currentStep !== stepIndex) {
+        logger.warn(
+          `[WorkflowRegistry] - Step mismatch for "${workflow.name}" (requestId: ${requestId}): expected step ${state.currentStep}, got ${stepIndex}`,
         );
         return;
       }
-      await this.routeToStep(workflow, requestId, targetIndex, payload);
-      return;
-    }
 
-    state.status = "failed";
-    await this.saveState(requestId, state);
-    logger.error(
-      `[WorkflowRegistry] - Workflow "${workflow.name}" failed at step "${currentStep.type}" (requestId: ${requestId})`,
-    );
-    await this.triggerNextWorkflows(workflow, "failed", requestId, payload);
+      const currentStep = workflow.steps[stepIndex]!;
+      const onFailure = currentStep.onFailure;
+
+      if (onFailure) {
+        const targetIndex = this.findStepIndex(workflow, onFailure);
+        if (targetIndex === -1) {
+          logger.error(
+            `[WorkflowRegistry] - onFailure target "${onFailure}" not found in workflow "${workflow.name}"`,
+          );
+          return;
+        }
+        await this.routeToStep(workflow, requestId, targetIndex, payload);
+        return;
+      }
+
+      state.status = "failed";
+      await this.saveState(requestId, state);
+      logger.error(
+        `[WorkflowRegistry] - Workflow "${workflow.name}" failed at step "${currentStep.type}" (requestId: ${requestId})`,
+      );
+      await this.triggerNextWorkflows(workflow, "failed", requestId, payload);
+    } finally {
+      this.processingLocks.delete(lockKey);
+    }
   }
 
   private async routeToStep(
