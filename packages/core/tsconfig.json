@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "rootDir": "package",
+    "rootDir": "src",
     "outDir": "./dist",
 
     "module": "es2022",
@@ -23,6 +23,6 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": ["package"],
+  "include": ["src"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

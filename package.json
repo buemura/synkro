@@ -1,49 +1,10 @@
 {
-  "name": "@synkro/core",
-  "version": "0.5.0",
-  "description": "Lightweight workflow and state machine orchestrator powered by Redis. Define event-driven workflows via configuration or code.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "default": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
-  ],
+  "name": "synkro",
+  "private": true,
+  "workspaces": ["packages/*", "examples/*"],
   "scripts": {
-    "build": "tsc",
-    "type-check": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
-  },
-  "keywords": [
-    "workflow",
-    "state-machine",
-    "orchestrator",
-    "event-driven",
-    "redis"
-  ],
-  "author": "buemura",
-  "license": "ISC",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/buemura/synkro.git"
-  },
-  "homepage": "https://github.com/buemura/synkro#readme",
-  "type": "module",
-  "dependencies": {
-    "ioredis": "^5.10.0"
-  },
-  "devDependencies": {
-    "@types/node": "^25.3.3",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present"
   }
 }

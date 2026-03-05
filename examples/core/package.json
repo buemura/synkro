@@ -16,7 +16,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@synkro/core": "file:../synkro-core-0.5.0.tgz",
+    "@synkro/core": "file:../../packages/core",
     "dotenv": "^17.3.1",
     "express": "^5.2.1"
   }
