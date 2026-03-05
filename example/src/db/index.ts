@@ -28,10 +28,19 @@ export interface Payment {
   updatedAt: Date;
 }
 
+export interface Shipping {
+  id: string;
+  orderId: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 class InMemoryStore {
   products: Product[] = [];
   orders: Order[] = [];
   payments: Payment[] = [];
+  shippings: Shipping[] = [];
 
   constructor() {
     this.seed();
@@ -154,6 +163,32 @@ class InMemoryStore {
     if (product) {
       product.stock -= quantityToSubtract;
       product.updatedAt = new Date();
+    }
+  }
+
+  insertShipping(data: { orderId: string; status: string }): Shipping {
+    const now = new Date();
+    const shipping: Shipping = {
+      id: randomUUID(),
+      orderId: data.orderId,
+      status: data.status,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.shippings.push(shipping);
+    return shipping;
+  }
+
+  findShippingByOrderId(orderId: string): Shipping[] {
+    return this.shippings.filter((s) => s.orderId === orderId);
+  }
+
+  updateShippingStatusByOrderId(orderId: string, status: string) {
+    for (const shipping of this.shippings) {
+      if (shipping.orderId === orderId) {
+        shipping.status = status;
+        shipping.updatedAt = new Date();
+      }
     }
   }
 }

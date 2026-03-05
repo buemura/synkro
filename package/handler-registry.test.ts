@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HandlerRegistry } from "./handler-registry.js";
 import type { RedisManager } from "./redis.js";
 
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function createMockRedis(): RedisManager {
   return {
     publishMessage: vi.fn(),
@@ -111,6 +115,65 @@ describe("HandlerRegistry", () => {
         payload: null,
       });
       expect(mockRedis.publishMessage).toHaveBeenCalled();
+    });
+
+    it("should publish a failure event after all retries are exhausted", async () => {
+      const handler = vi.fn().mockRejectedValue(new Error("fail"));
+      registry.register("user:created", handler, { maxRetries: 1 });
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock
+        .calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      const message = JSON.stringify({
+        requestId: "req-123",
+        payload: { name: "Alice" },
+      });
+
+      messageCallback(message);
+      await flushPromises();
+
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:user:created:failed",
+        JSON.stringify({
+          requestId: "req-123",
+          payload: { name: "Alice" },
+        }),
+      );
+    });
+
+    it("should not publish failure event if handler succeeds after retry", async () => {
+      const handler = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("fail"))
+        .mockResolvedValueOnce(undefined);
+      registry.register("user:created", handler, { maxRetries: 1 });
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock
+        .calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      const message = JSON.stringify({
+        requestId: "req-123",
+        payload: { name: "Alice" },
+      });
+
+      messageCallback(message);
+      await flushPromises();
+
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:user:created:completed",
+        JSON.stringify({
+          requestId: "req-123",
+          payload: { name: "Alice" },
+        }),
+      );
+      expect(mockRedis.publishMessage).not.toHaveBeenCalledWith(
+        "event:user:created:failed",
+        expect.any(String),
+      );
     });
   });
 });

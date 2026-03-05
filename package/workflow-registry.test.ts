@@ -270,4 +270,503 @@ describe("WorkflowRegistry", () => {
       expect(mockRedis.publishMessage).not.toHaveBeenCalled();
     });
   });
+
+  describe("conditional routing", () => {
+    function createConditionalWorkflow(): SynkroWorkflow {
+      return {
+        name: "doc-processing",
+        steps: [
+          {
+            type: "RunOCR",
+            handler: vi.fn(),
+            onSuccess: "ProcessingSucceeded",
+            onFailure: "ProcessingFailed",
+          },
+          {
+            type: "ProcessingSucceeded",
+            handler: vi.fn(),
+          },
+          {
+            type: "ProcessingFailed",
+            handler: vi.fn(),
+          },
+        ],
+      };
+    }
+
+    it("should subscribe to both completed and failed channels for each step", () => {
+      const workflow = createConditionalWorkflow();
+      registry.registerWorkflows([workflow]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const channels = subscribeCalls.map((call) => call[0]);
+
+      expect(channels).toContain("event:workflow:doc-processing:RunOCR:completed");
+      expect(channels).toContain("event:workflow:doc-processing:RunOCR:failed");
+      expect(channels).toContain("event:workflow:doc-processing:ProcessingSucceeded:completed");
+      expect(channels).toContain("event:workflow:doc-processing:ProcessingSucceeded:failed");
+    });
+
+    it("should route to onSuccess step when handler succeeds", async () => {
+      const workflow = createConditionalWorkflow();
+      registry.registerWorkflows([workflow]);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "doc-processing",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:doc-processing:RunOCR:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-1", payload: { file: "doc.pdf" } }),
+      );
+      await flushPromises();
+
+      // Should route to ProcessingSucceeded (index 1), not sequentially
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:doc-processing:ProcessingSucceeded",
+        JSON.stringify({ requestId: "req-1", payload: { file: "doc.pdf" } }),
+      );
+
+      // Should save state with step 1
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1",
+        JSON.stringify({
+          workflowName: "doc-processing",
+          currentStep: 1,
+          status: "running",
+        }),
+        86400,
+      );
+    });
+
+    it("should route to onFailure step when handler fails", async () => {
+      const workflow = createConditionalWorkflow();
+      registry.registerWorkflows([workflow]);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "doc-processing",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const failureCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:doc-processing:RunOCR:failed",
+      );
+      const failureCallback = failureCall![1] as (message: string) => void;
+
+      failureCallback(
+        JSON.stringify({ requestId: "req-1", payload: { file: "doc.pdf" } }),
+      );
+      await flushPromises();
+
+      // Should route to ProcessingFailed (index 2)
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:doc-processing:ProcessingFailed",
+        JSON.stringify({ requestId: "req-1", payload: { file: "doc.pdf" } }),
+      );
+
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1",
+        JSON.stringify({
+          workflowName: "doc-processing",
+          currentStep: 2,
+          status: "running",
+        }),
+        86400,
+      );
+    });
+
+    it("should mark workflow as failed when handler fails without onFailure", async () => {
+      const workflow: SynkroWorkflow = {
+        name: "simple-workflow",
+        steps: [
+          { type: "step1", handler: vi.fn() },
+          { type: "step2", handler: vi.fn() },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "simple-workflow",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const failureCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:simple-workflow:step1:failed",
+      );
+      const failureCallback = failureCall![1] as (message: string) => void;
+
+      failureCallback(
+        JSON.stringify({ requestId: "req-1", payload: null }),
+      );
+      await flushPromises();
+
+      // Should mark as failed, not advance
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1",
+        JSON.stringify({
+          workflowName: "simple-workflow",
+          currentStep: 0,
+          status: "failed",
+        }),
+        86400,
+      );
+
+      // Should not publish to any step
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
+
+    it("should mark workflow as completed when a branch target step completes without onSuccess", async () => {
+      const workflow = createConditionalWorkflow();
+      registry.registerWorkflows([workflow]);
+
+      // ProcessingSucceeded is at index 1 and is a branch target
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "doc-processing",
+          currentStep: 1,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:doc-processing:ProcessingSucceeded:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-1", payload: { file: "doc.pdf" } }),
+      );
+      await flushPromises();
+
+      // Should mark as completed, NOT advance to ProcessingFailed
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1",
+        JSON.stringify({
+          workflowName: "doc-processing",
+          currentStep: 1,
+          status: "completed",
+        }),
+        86400,
+      );
+
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
+
+    it("should skip sibling branch targets and advance to the next regular step", async () => {
+      const workflow: SynkroWorkflow = {
+        name: "order-flow",
+        steps: [
+          {
+            type: "Payment",
+            handler: vi.fn(),
+            onSuccess: "PaymentCompleted",
+            onFailure: "PaymentFailed",
+          },
+          { type: "PaymentCompleted", handler: vi.fn() },
+          { type: "PaymentFailed", handler: vi.fn() },
+          { type: "Notify", handler: vi.fn() },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      // PaymentCompleted (index 1) just completed
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "order-flow",
+          currentStep: 1,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:order-flow:PaymentCompleted:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-1", payload: {} }),
+      );
+      await flushPromises();
+
+      // Should skip PaymentFailed (index 2, branch target) and go to Notify (index 3)
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:order-flow:Notify",
+        JSON.stringify({ requestId: "req-1", payload: {} }),
+      );
+
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1",
+        JSON.stringify({
+          workflowName: "order-flow",
+          currentStep: 3,
+          status: "running",
+        }),
+        86400,
+      );
+    });
+
+    it("should still advance sequentially when no onSuccess is defined", async () => {
+      const workflow = createTestWorkflow();
+      registry.registerWorkflows([workflow]);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "order-processing",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:order-processing:validate:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-1", payload: { orderId: 42 } }),
+      );
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:order-processing:charge",
+        JSON.stringify({ requestId: "req-1", payload: { orderId: 42 } }),
+      );
+    });
+  });
+
+  describe("workflow chaining", () => {
+    it("should trigger onSuccess workflow when workflow completes", async () => {
+      const workflows: SynkroWorkflow[] = [
+        {
+          name: "process-order",
+          steps: [{ type: "validate", handler: vi.fn() }],
+          onSuccess: "start-shipment",
+        },
+        {
+          name: "start-shipment",
+          steps: [{ type: "ship", handler: vi.fn() }],
+        },
+      ];
+      registry.registerWorkflows(workflows);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "process-order",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:process-order:validate:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-1", payload: { orderId: 1 } }),
+      );
+      await flushPromises();
+
+      // Should start the chained workflow
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:start-shipment:ship",
+        JSON.stringify({ requestId: "req-1", payload: { orderId: 1 } }),
+      );
+    });
+
+    it("should trigger onFailure workflow when workflow fails", async () => {
+      const workflows: SynkroWorkflow[] = [
+        {
+          name: "process-order",
+          steps: [{ type: "validate", handler: vi.fn() }],
+          onFailure: "handle-error",
+        },
+        {
+          name: "handle-error",
+          steps: [{ type: "notify", handler: vi.fn() }],
+        },
+      ];
+      registry.registerWorkflows(workflows);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "process-order",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const failureCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:process-order:validate:failed",
+      );
+      const failureCallback = failureCall![1] as (message: string) => void;
+
+      failureCallback(
+        JSON.stringify({ requestId: "req-1", payload: { orderId: 1 } }),
+      );
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:handle-error:notify",
+        JSON.stringify({ requestId: "req-1", payload: { orderId: 1 } }),
+      );
+    });
+
+    it("should trigger onComplete workflow regardless of outcome", async () => {
+      const workflows: SynkroWorkflow[] = [
+        {
+          name: "process-order",
+          steps: [{ type: "validate", handler: vi.fn() }],
+          onComplete: "cleanup",
+        },
+        {
+          name: "cleanup",
+          steps: [{ type: "clean", handler: vi.fn() }],
+        },
+      ];
+      registry.registerWorkflows(workflows);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "process-order",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:process-order:validate:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-1", payload: null }),
+      );
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:cleanup:clean",
+        JSON.stringify({ requestId: "req-1", payload: null }),
+      );
+    });
+
+    it("should trigger both onSuccess and onComplete on success", async () => {
+      const workflows: SynkroWorkflow[] = [
+        {
+          name: "process-order",
+          steps: [{ type: "validate", handler: vi.fn() }],
+          onSuccess: "start-shipment",
+          onComplete: "cleanup",
+        },
+        {
+          name: "start-shipment",
+          steps: [{ type: "ship", handler: vi.fn() }],
+        },
+        {
+          name: "cleanup",
+          steps: [{ type: "clean", handler: vi.fn() }],
+        },
+      ];
+      registry.registerWorkflows(workflows);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "process-order",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:process-order:validate:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-1", payload: null }),
+      );
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:start-shipment:ship",
+        JSON.stringify({ requestId: "req-1", payload: null }),
+      );
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:cleanup:clean",
+        JSON.stringify({ requestId: "req-1", payload: null }),
+      );
+    });
+
+    it("should not trigger onSuccess when workflow fails", async () => {
+      const workflows: SynkroWorkflow[] = [
+        {
+          name: "process-order",
+          steps: [{ type: "validate", handler: vi.fn() }],
+          onSuccess: "start-shipment",
+          onFailure: "handle-error",
+        },
+        {
+          name: "start-shipment",
+          steps: [{ type: "ship", handler: vi.fn() }],
+        },
+        {
+          name: "handle-error",
+          steps: [{ type: "notify", handler: vi.fn() }],
+        },
+      ];
+      registry.registerWorkflows(workflows);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "process-order",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const failureCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:process-order:validate:failed",
+      );
+      const failureCallback = failureCall![1] as (message: string) => void;
+
+      failureCallback(
+        JSON.stringify({ requestId: "req-1", payload: null }),
+      );
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:handle-error:notify",
+        JSON.stringify({ requestId: "req-1", payload: null }),
+      );
+      expect(mockRedis.publishMessage).not.toHaveBeenCalledWith(
+        "workflow:start-shipment:ship",
+        expect.any(String),
+      );
+    });
+  });
 });

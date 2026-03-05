@@ -6,6 +6,9 @@ Lightweight workflow and state machine orchestrator powered by Redis. Define eve
 
 - **Standalone Events** — Simple pub/sub event handlers with Redis
 - **Sequential Workflows** — Multi-step workflows that execute in order, with state tracked in Redis
+- **Conditional Routing** — Branch to different steps based on handler success or failure
+- **Workflow Chaining** — Trigger follow-up workflows on completion, success, or failure
+- **Retry Support** — Configurable retry logic per step
 - **Simple API** — Single `Synkro` class with minimal configuration
 - **TypeScript** — Full type support out of the box
 
@@ -75,6 +78,113 @@ const synkro = await Synkro.start({
 await synkro.publish("ProcessOrder", { orderId: "abc-123", amount: 49.99 });
 ```
 
+### Conditional Routing
+
+Use `onSuccess` and `onFailure` on a step to branch to different steps based on the handler outcome. If a handler throws (after all retries), the workflow routes to the `onFailure` step. On success, it routes to the `onSuccess` step.
+
+```ts
+{
+  name: "ProcessDocument",
+  steps: [
+    {
+      type: "RunOCR",
+      handler: ocrHandler,
+      retry: { maxRetries: 2 },
+      onSuccess: "ProcessingSucceeded",
+      onFailure: "ProcessingFailed",
+    },
+    {
+      type: "ProcessingSucceeded",
+      handler: async (ctx) => {
+        console.log("OCR completed successfully");
+      },
+    },
+    {
+      type: "ProcessingFailed",
+      handler: async (ctx) => {
+        console.log("OCR failed, notifying support");
+      },
+    },
+  ],
+}
+```
+
+Steps referenced by `onSuccess`/`onFailure` are treated as branch targets. When a branch target completes, the workflow skips over sibling branch targets and advances to the next regular step (if any), or completes.
+
+```ts
+{
+  name: "ProcessOrder",
+  steps: [
+    {
+      type: "Payment",
+      handler: paymentHandler,
+      onSuccess: "PaymentCompleted",
+      onFailure: "PaymentFailed",
+    },
+    { type: "PaymentCompleted", handler: completedHandler },
+    { type: "PaymentFailed", handler: failedHandler },
+    { type: "SendNotification", handler: notifyHandler }, // runs after either branch
+  ],
+}
+```
+
+Steps without `onSuccess`/`onFailure` advance sequentially as before.
+
+### Workflow Chaining
+
+Trigger follow-up workflows when a workflow finishes:
+
+- **`onSuccess`** — starts a workflow when the current one completes successfully
+- **`onFailure`** — starts a workflow when the current one fails
+- **`onComplete`** — starts a workflow regardless of outcome (runs after `onSuccess`/`onFailure`)
+
+```ts
+const workflows = [
+  {
+    name: "ProcessOrder",
+    onSuccess: "StartShipment",
+    onFailure: "HandleError",
+    onComplete: "NotifyCustomer",
+    steps: [
+      { type: "ValidateStock", handler: stockHandler },
+      { type: "ProcessPayment", handler: paymentHandler },
+    ],
+  },
+  {
+    name: "StartShipment",
+    steps: [
+      { type: "ShipOrder", handler: shipHandler },
+    ],
+  },
+  {
+    name: "HandleError",
+    steps: [
+      { type: "LogError", handler: errorHandler },
+    ],
+  },
+  {
+    name: "NotifyCustomer",
+    steps: [
+      { type: "SendEmail", handler: emailHandler },
+    ],
+  },
+];
+```
+
+Chained workflows inherit the same `requestId` and `payload` from the completed workflow.
+
+### Retry
+
+Configure retries per step. The handler will be retried up to `maxRetries` times before being considered failed.
+
+```ts
+{
+  type: "ProcessPayment",
+  handler: paymentHandler,
+  retry: { maxRetries: 3 },
+}
+```
+
 ## API
 
 ### `Synkro.start(options): Promise<Synkro>`
@@ -84,12 +194,13 @@ Creates and returns a running instance.
 ```ts
 type SynkroOptions = {
   redisUrl: string;
+  debug?: boolean;
   events?: SynkroEvent[];
   workflows?: SynkroWorkflow[];
 };
 ```
 
-### `synkro.on(eventType, handler): void`
+### `synkro.on(eventType, handler, retry?): void`
 
 Registers an event handler at runtime.
 
@@ -118,19 +229,30 @@ Disconnects all Redis clients.
 ## Types
 
 ```ts
+type RetryConfig = {
+  maxRetries: number;
+};
+
 type SynkroEvent = {
   type: string;
   handler: HandlerFunction;
+  retry?: RetryConfig;
 };
 
 type SynkroWorkflow = {
   name: string;
   steps: SynkroWorkflowStep[];
+  onComplete?: string;
+  onSuccess?: string;
+  onFailure?: string;
 };
 
 type SynkroWorkflowStep = {
   type: string;
   handler: HandlerFunction;
+  retry?: RetryConfig;
+  onSuccess?: string;
+  onFailure?: string;
 };
 
 type HandlerCtx = {

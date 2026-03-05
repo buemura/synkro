@@ -64,6 +64,14 @@ export class HandlerRegistry {
           logger.error(
             `[HandlerRegistry] - Handler "${eventType}" failed after ${maxRetries + 1} attempt(s): ${error}`,
           );
+
+          this.redis.publishMessage(
+            `event:${eventType}:failed`,
+            JSON.stringify({
+              requestId: event.requestId,
+              payload: event.payload,
+            }),
+          );
         }
       }
     }

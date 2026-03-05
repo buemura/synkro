@@ -10,5 +10,5 @@ export async function paymentCompletedHandler(ctx: HandlerCtx) {
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
   db.updatePaymentStatusByOrderId(orderId, "completed");
-  db.updateOrderStatus(orderId, "completed");
+  db.updateOrderStatus(orderId, "payment_completed");
 }

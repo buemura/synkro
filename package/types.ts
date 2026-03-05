@@ -12,11 +12,16 @@ export type SynkroWorkflowStep = {
   type: string;
   handler: HandlerFunction;
   retry?: RetryConfig;
+  onSuccess?: string;
+  onFailure?: string;
 };
 
 export type SynkroWorkflow = {
   name: string;
   steps: SynkroWorkflowStep[];
+  onComplete?: string;
+  onSuccess?: string;
+  onFailure?: string;
 };
 
 export type SynkroOptions = {

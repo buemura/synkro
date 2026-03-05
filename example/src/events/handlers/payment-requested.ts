@@ -10,6 +10,8 @@ export async function paymentRequestedHandler(ctx: HandlerCtx) {
 
   console.log(`Payment requested for order: ${orderId}`);
 
+  // throw new Error("Simulated failure in PaymentRequested handler");
+
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
   db.insertPayment({

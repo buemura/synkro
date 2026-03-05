@@ -1,5 +1,7 @@
 export enum WorkflowTypes {
   ProcessOrder = "ProcessOrder",
+  StartShipment = "StartShipment",
+  NotifyCustomer = "NotifyCustomer",
 }
 
 export enum EventTypes {
@@ -15,6 +17,9 @@ export enum EventTypes {
   PaymentCompleted = "PaymentCompleted",
   PaymentFailed = "PaymentFailed",
 
-  // Workflow events
-  ProcessOrder = "ProcessOrder",
+  // Shipping events
+  ShippingRequested = "ShippingRequested",
+
+  // Notification events
+  NotifyCustomer = "NotifyCustomer",
 }
