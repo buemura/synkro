@@ -1,6 +1,6 @@
 {
   "name": "@synkro/ui",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dashboard UI for @synkro/core",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,7 +34,7 @@
   },
   "homepage": "https://github.com/buemura/synkro/packages/ui#readme",
   "peerDependencies": {
-    "@synkro/core": "^0.7.0"
+    "@synkro/core": "^0.8.0"
   },
   "devDependencies": {
     "@synkro/core": "workspace:*",

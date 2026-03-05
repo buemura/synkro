@@ -3,10 +3,14 @@ import { OnWorkflowStep } from "@synkro/nestjs";
 import type { HandlerCtx } from "@synkro/core";
 import { OrderEvent, OrderWorkflow } from "./order.events.js";
 import { OrderService } from "./order.service.js";
+import { ProductService } from "../product/product.service.js";
 
 @Injectable()
 export class OrderWorkflowHandler {
-  constructor(private readonly orderService: OrderService) {}
+  constructor(
+    private readonly orderService: OrderService,
+    private readonly productService: ProductService,
+  ) {}
 
   @OnWorkflowStep(OrderWorkflow.ProcessOrder, OrderEvent.StockUpdate)
   async handleStockUpdate(ctx: HandlerCtx): Promise<void> {
@@ -14,6 +18,7 @@ export class OrderWorkflowHandler {
       productId: string;
       quantity: number;
     };
+    this.productService.decreaseStock(productId, quantity);
     console.log(`[StockUpdate] product=${productId} qty=${quantity}`);
     ctx.setPayload({ productId, quantity, stockUpdated: true });
   }
