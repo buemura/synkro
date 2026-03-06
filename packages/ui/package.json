@@ -34,7 +34,7 @@
   },
   "homepage": "https://github.com/buemura/orko/packages/ui#readme",
   "peerDependencies": {
-    "@orko/core": "^0.8.0"
+    "@orko/core": "^0.1.0"
   },
   "devDependencies": {
     "@orko/core": "workspace:*",

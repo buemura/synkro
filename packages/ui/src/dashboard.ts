@@ -366,7 +366,7 @@ export function getDashboardHtml(): string {
   <div class="container">
     <header>
       <div class="logo">
-        <div class="logo-icon">S</div>
+        <div class="logo-icon">O</div>
         <h1>Orko <span>Dashboard</span></h1>
       </div>
       <button class="btn" id="header-action">Refresh</button>
