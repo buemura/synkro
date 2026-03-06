@@ -2,7 +2,7 @@ import { logger } from "../logger.js";
 
 import type { HandlerRegistry } from "../handlers/handler-registry.js";
 import type { TransportManager } from "../transport/transport.js";
-import type { HandlerFunction, OrkoWorkflow, WorkflowInfo } from "../types.js";
+import type { HandlerFunction, SynkroWorkflow, WorkflowInfo } from "../types.js";
 
 type WorkflowState = {
   workflowName: string;
@@ -11,11 +11,11 @@ type WorkflowState = {
 };
 
 export class WorkflowRegistry {
-  private workflows = new Map<string, OrkoWorkflow>();
+  private workflows = new Map<string, SynkroWorkflow>();
   private branchTargets = new Map<string, Set<string>>();
   private eventToWorkflows = new Map<
     string,
-    { workflow: OrkoWorkflow; stepIndex: number }[]
+    { workflow: SynkroWorkflow; stepIndex: number }[]
   >();
   private processingLocks = new Set<string>();
   private locks = new Map<string, Promise<void>>();
@@ -60,7 +60,7 @@ export class WorkflowRegistry {
     }));
   }
 
-  registerWorkflows(workflows: OrkoWorkflow[]): void {
+  registerWorkflows(workflows: SynkroWorkflow[]): void {
     for (const workflow of workflows) {
       this.workflows.set(workflow.name, workflow);
 
@@ -142,7 +142,7 @@ export class WorkflowRegistry {
     this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
   }
 
-  private subscribeToWorkflowEvents(workflow: OrkoWorkflow): void {
+  private subscribeToWorkflowEvents(workflow: SynkroWorkflow): void {
     for (let i = 0; i < workflow.steps.length; i++) {
       const step = workflow.steps[i]!;
       const channel = this.stepChannel(workflow.name, step.type);
@@ -170,7 +170,7 @@ export class WorkflowRegistry {
   }
 
   private async handleStepCompletion(
-    workflow: OrkoWorkflow,
+    workflow: SynkroWorkflow,
     stepIndex: number,
     message: string,
   ): Promise<void> {
@@ -238,7 +238,7 @@ export class WorkflowRegistry {
   }
 
   private async handleStepFailure(
-    workflow: OrkoWorkflow,
+    workflow: SynkroWorkflow,
     stepIndex: number,
     message: string,
   ): Promise<void> {
@@ -293,7 +293,7 @@ export class WorkflowRegistry {
   }
 
   private async routeToStep(
-    workflow: OrkoWorkflow,
+    workflow: SynkroWorkflow,
     requestId: string,
     targetIndex: number,
     payload: unknown,
@@ -315,7 +315,7 @@ export class WorkflowRegistry {
   }
 
   private async triggerNextWorkflows(
-    workflow: OrkoWorkflow,
+    workflow: SynkroWorkflow,
     outcome: "completed" | "failed",
     requestId: string,
     payload: unknown,
@@ -346,7 +346,7 @@ export class WorkflowRegistry {
     }
   }
 
-  private findNextStep(workflow: OrkoWorkflow, currentIndex: number): number {
+  private findNextStep(workflow: SynkroWorkflow, currentIndex: number): number {
     const targets = this.branchTargets.get(workflow.name);
     for (let i = currentIndex + 1; i < workflow.steps.length; i++) {
       if (!targets?.has(workflow.steps[i]!.type)) {
@@ -356,7 +356,7 @@ export class WorkflowRegistry {
     return -1;
   }
 
-  private findStepIndex(workflow: OrkoWorkflow, stepType: string): number {
+  private findStepIndex(workflow: SynkroWorkflow, stepType: string): number {
     return workflow.steps.findIndex((step) => step.type === stepType);
   }
 

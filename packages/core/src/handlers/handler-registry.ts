@@ -29,9 +29,9 @@ export class HandlerRegistry {
 
   async getEventMetrics(eventType: string): Promise<EventMetrics> {
     const [received, completed, failed] = await Promise.all([
-      this.redis.getCache(`orko:metrics:${eventType}:received`),
-      this.redis.getCache(`orko:metrics:${eventType}:completed`),
-      this.redis.getCache(`orko:metrics:${eventType}:failed`),
+      this.redis.getCache(`synkro:metrics:${eventType}:received`),
+      this.redis.getCache(`synkro:metrics:${eventType}:completed`),
+      this.redis.getCache(`synkro:metrics:${eventType}:failed`),
     ]);
     return {
       type: eventType,
@@ -87,7 +87,7 @@ export class HandlerRegistry {
 
     try {
       if (trackMetrics) {
-        await this.redis.incrementCache(`orko:metrics:${eventType}:received`);
+        await this.redis.incrementCache(`synkro:metrics:${eventType}:received`);
       }
 
       const ctx: HandlerCtx = {
@@ -107,7 +107,7 @@ export class HandlerRegistry {
           await entry.handler(ctx);
 
           if (trackMetrics) {
-            await this.redis.incrementCache(`orko:metrics:${eventType}:completed`);
+            await this.redis.incrementCache(`synkro:metrics:${eventType}:completed`);
           }
           this.redis.publishMessage(
             `event:${eventType}:completed`,
@@ -128,7 +128,7 @@ export class HandlerRegistry {
             );
 
             if (trackMetrics) {
-              await this.redis.incrementCache(`orko:metrics:${eventType}:failed`);
+              await this.redis.incrementCache(`synkro:metrics:${eventType}:failed`);
             }
             this.redis.publishMessage(
               `event:${eventType}:failed`,

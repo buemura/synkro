@@ -1,6 +1,6 @@
-# @orko/ui
+# @synkro/ui
 
-Dashboard UI for [@orko/core](https://github.com/buemura/orko). Mount it on any HTTP endpoint to visualize your registered events and workflows in real time.
+Dashboard UI for [@synkro/core](https://github.com/buemura/synkro). Mount it on any HTTP endpoint to visualize your registered events and workflows in real time.
 
 ## Screenshots
 
@@ -36,16 +36,16 @@ Click any workflow to see a branching flow diagram with SVG connectors (green fo
 ## Installation
 
 ```bash
-npm install @orko/ui
+npm install @synkro/ui
 ```
 
 ## Usage
 
 ```typescript
-import { createDashboardHandler } from "@orko/ui";
-import { Orko } from "@orko/core";
+import { createDashboardHandler } from "@synkro/ui";
+import { Synkro } from "@synkro/core";
 
-const orko = await Orko.start({
+const synkro = await Synkro.start({
   transport: "redis",
   connectionUrl: "redis://localhost:6379",
   events: [/* ... */],
@@ -60,10 +60,10 @@ import express from "express";
 
 const app = express();
 
-app.use("/orko", createDashboardHandler(orko, { basePath: "/orko" }));
+app.use("/synkro", createDashboardHandler(synkro, { basePath: "/synkro" }));
 
 app.listen(3000);
-// Dashboard available at http://localhost:3000/orko
+// Dashboard available at http://localhost:3000/synkro
 ```
 
 ### Raw Node.js HTTP
@@ -71,7 +71,7 @@ app.listen(3000);
 ```typescript
 import http from "node:http";
 
-const server = http.createServer(createDashboardHandler(orko));
+const server = http.createServer(createDashboardHandler(synkro));
 
 server.listen(3000);
 // Dashboard available at http://localhost:3000
@@ -79,7 +79,7 @@ server.listen(3000);
 
 ## API
 
-### `createDashboardHandler(orko, options?)`
+### `createDashboardHandler(synkro, options?)`
 
 Returns a standard Node.js HTTP request handler `(IncomingMessage, ServerResponse) => void`.
 
@@ -87,7 +87,7 @@ Returns a standard Node.js HTTP request handler `(IncomingMessage, ServerRespons
 
 | Parameter | Type | Description |
 |---|---|---|
-| `orko` | `Orko` | A started Orko instance |
+| `synkro` | `Synkro` | A started Synkro instance |
 | `options.basePath` | `string` | Base path where the dashboard is mounted (default: `"/"`) |
 
 **Served routes (relative to basePath):**

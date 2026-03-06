@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
-import { OrkoService } from "@orko/nestjs";
+import { SynkroService } from "@synkro/nestjs";
 import { OrderService } from "./order.service.js";
 import { OrderWorkflow } from "./order.events.js";
 
@@ -7,7 +7,7 @@ import { OrderWorkflow } from "./order.events.js";
 export class OrderController {
   constructor(
     private readonly orderService: OrderService,
-    private readonly orko: OrkoService,
+    private readonly synkro: SynkroService,
   ) {}
 
   @Get()
@@ -25,7 +25,7 @@ export class OrderController {
     @Body() body: { productId: string; quantity: number; amount: number },
   ) {
     const order = this.orderService.create(body);
-    await this.orko.publish(OrderWorkflow.ProcessOrder, {
+    await this.synkro.publish(OrderWorkflow.ProcessOrder, {
       orderId: order.id,
       productId: body.productId,
       quantity: body.quantity,

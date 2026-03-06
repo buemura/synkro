@@ -3,9 +3,9 @@ import { describe, it, expect } from "vitest";
 import { Test } from "@nestjs/testing";
 import { Injectable } from "@nestjs/common";
 import { DiscoveryModule } from "@nestjs/core";
-import type { HandlerCtx } from "@orko/core";
+import type { HandlerCtx } from "@synkro/core";
 
-import { OrkoExplorer } from "./orko.explorer.js";
+import { SynkroExplorer } from "./synkro.explorer.js";
 import { OnEvent } from "./decorators/on-event.decorator.js";
 import { OnWorkflowStep } from "./decorators/on-workflow-step.decorator.js";
 
@@ -47,15 +47,15 @@ class PlainService {
   }
 }
 
-describe("OrkoExplorer", () => {
+describe("SynkroExplorer", () => {
   async function createExplorer(providers: any[]) {
     const module = await Test.createTestingModule({
       imports: [DiscoveryModule],
-      providers: [OrkoExplorer, ...providers],
+      providers: [SynkroExplorer, ...providers],
     }).compile();
 
     await module.init();
-    return module.get(OrkoExplorer);
+    return module.get(SynkroExplorer);
   }
 
   describe("exploreEventHandlers", () => {

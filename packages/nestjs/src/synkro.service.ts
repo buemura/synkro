@@ -4,25 +4,25 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from "@nestjs/common";
-import { Orko } from "@orko/core";
+import { Synkro } from "@synkro/core";
 import type {
   HandlerFunction,
   RetryConfig,
-  OrkoOptions,
-} from "@orko/core";
+  SynkroOptions,
+} from "@synkro/core";
 
-import { ORKO_MODULE_OPTIONS } from "./orko.constants.js";
-import { OrkoExplorer } from "./orko.explorer.js";
-import type { OrkoModuleOptions } from "./orko.interfaces.js";
+import { SYNKRO_MODULE_OPTIONS } from "./synkro.constants.js";
+import { SynkroExplorer } from "./synkro.explorer.js";
+import type { SynkroModuleOptions } from "./synkro.interfaces.js";
 
 @Injectable()
-export class OrkoService implements OnModuleInit, OnModuleDestroy {
-  private orko!: Orko;
+export class SynkroService implements OnModuleInit, OnModuleDestroy {
+  private synkro!: Synkro;
 
   constructor(
-    @Inject(ORKO_MODULE_OPTIONS)
-    private readonly options: OrkoModuleOptions,
-    private readonly explorer: OrkoExplorer,
+    @Inject(SYNKRO_MODULE_OPTIONS)
+    private readonly options: SynkroModuleOptions,
+    private readonly explorer: SynkroExplorer,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -45,24 +45,24 @@ export class OrkoService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const orkoOptions: OrkoOptions = {
+    const synkroOptions: SynkroOptions = {
       transport: this.options.transport,
       connectionUrl: this.options.connectionUrl,
       debug: this.options.debug,
       workflows,
     };
 
-    this.orko = await Orko.start(orkoOptions);
+    this.synkro = await Synkro.start(synkroOptions);
 
     // Register discovered event handlers
     const eventHandlers = this.explorer.exploreEventHandlers();
     for (const { eventType, handler, retry } of eventHandlers) {
-      this.orko.on(eventType, handler, retry);
+      this.synkro.on(eventType, handler, retry);
     }
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.orko.stop();
+    await this.synkro.stop();
   }
 
   async publish(
@@ -70,14 +70,14 @@ export class OrkoService implements OnModuleInit, OnModuleDestroy {
     payload?: unknown,
     requestId?: string,
   ): Promise<string> {
-    return this.orko.publish(event, payload, requestId);
+    return this.synkro.publish(event, payload, requestId);
   }
 
   on(eventType: string, handler: HandlerFunction, retry?: RetryConfig): void {
-    this.orko.on(eventType, handler, retry);
+    this.synkro.on(eventType, handler, retry);
   }
 
-  getInstance(): Orko {
-    return this.orko;
+  getInstance(): Synkro {
+    return this.synkro;
   }
 }

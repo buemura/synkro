@@ -1,30 +1,30 @@
-import { Orko } from "@orko/core";
+import { Synkro } from "@synkro/core";
 import type {
   EventMetrics,
   HandlerFunction,
   RetryConfig,
-  OrkoIntrospection,
-} from "@orko/core";
+  SynkroIntrospection,
+} from "@synkro/core";
 
-import type { OrkoNextOptions } from "./types.js";
+import type { SynkroNextOptions } from "./types.js";
 
-const GLOBAL_KEY = "__orko_instance__";
+const GLOBAL_KEY = "__synkro_instance__";
 
-export type OrkoClient = {
+export type SynkroClient = {
   publish(event: string, payload?: unknown, requestId?: string): Promise<string>;
   on(eventType: string, handler: HandlerFunction, retry?: RetryConfig): void;
-  introspect(): Promise<OrkoIntrospection>;
+  introspect(): Promise<SynkroIntrospection>;
   getEventMetrics(eventType: string): Promise<EventMetrics>;
-  getInstance(): Promise<Orko>;
+  getInstance(): Promise<Synkro>;
   stop(): Promise<void>;
 };
 
-export function createOrko(options: OrkoNextOptions): OrkoClient {
-  let instancePromise: Promise<Orko> | undefined;
+export function createSynkro(options: SynkroNextOptions): SynkroClient {
+  let instancePromise: Promise<Synkro> | undefined;
 
-  function getOrCreateInstance(): Promise<Orko> {
+  function getOrCreateInstance(): Promise<Synkro> {
     const cached = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as
-      | Promise<Orko>
+      | Promise<Synkro>
       | undefined;
 
     if (cached) {
@@ -35,30 +35,30 @@ export function createOrko(options: OrkoNextOptions): OrkoClient {
       return instancePromise;
     }
 
-    instancePromise = Orko.start(options);
+    instancePromise = Synkro.start(options);
     (globalThis as Record<string, unknown>)[GLOBAL_KEY] = instancePromise;
     return instancePromise;
   }
 
   return {
     async publish(event, payload, requestId) {
-      const orko = await getOrCreateInstance();
-      return orko.publish(event, payload, requestId);
+      const synkro = await getOrCreateInstance();
+      return synkro.publish(event, payload, requestId);
     },
 
     async on(eventType, handler, retry) {
-      const orko = await getOrCreateInstance();
-      orko.on(eventType, handler, retry);
+      const synkro = await getOrCreateInstance();
+      synkro.on(eventType, handler, retry);
     },
 
     async introspect() {
-      const orko = await getOrCreateInstance();
-      return orko.introspect();
+      const synkro = await getOrCreateInstance();
+      return synkro.introspect();
     },
 
     async getEventMetrics(eventType) {
-      const orko = await getOrCreateInstance();
-      return orko.getEventMetrics(eventType);
+      const synkro = await getOrCreateInstance();
+      return synkro.getEventMetrics(eventType);
     },
 
     async getInstance() {
@@ -66,10 +66,10 @@ export function createOrko(options: OrkoNextOptions): OrkoClient {
     },
 
     async stop() {
-      const orko = await getOrCreateInstance();
+      const synkro = await getOrCreateInstance();
       delete (globalThis as Record<string, unknown>)[GLOBAL_KEY];
       instancePromise = undefined;
-      await orko.stop();
+      await synkro.stop();
     },
   };
 }

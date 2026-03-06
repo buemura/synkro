@@ -13,13 +13,13 @@ import type {
   EventMetrics,
   HandlerFunction,
   RetryConfig,
-  OrkoIntrospection,
-  OrkoOptions,
-  OrkoWorkflow,
+  SynkroIntrospection,
+  SynkroOptions,
+  SynkroWorkflow,
 } from "./types.js";
 import type { TransportManager } from "./transport/index.js";
 
-export class Orko {
+export class Synkro {
   private transport: TransportManager;
   private handlerRegistry: HandlerRegistry;
   private workflowRegistry: WorkflowRegistry;
@@ -31,7 +31,7 @@ export class Orko {
     this.handlerRegistry.setPublishFn(this.publish.bind(this));
   }
 
-  static async start(options: OrkoOptions): Promise<Orko> {
+  static async start(options: SynkroOptions): Promise<Synkro> {
     setDebug(options.debug ?? false);
 
     let transport: TransportManager;
@@ -44,7 +44,7 @@ export class Orko {
       transport = new RedisManager(options.connectionUrl);
     }
 
-    const instance = new Orko(transport);
+    const instance = new Synkro(transport);
 
     // Patch decorated workflow step handlers before registering workflows
     const workflows = options.workflows
@@ -110,7 +110,7 @@ export class Orko {
     return this.handlerRegistry.getEventMetrics(eventType);
   }
 
-  introspect(): OrkoIntrospection {
+  introspect(): SynkroIntrospection {
     return {
       events: this.handlerRegistry.getRegisteredEvents(),
       workflows: this.workflowRegistry.getRegisteredWorkflows(),
@@ -122,9 +122,9 @@ export class Orko {
   }
 
   private patchWorkflowHandlers(
-    workflows: OrkoWorkflow[],
+    workflows: SynkroWorkflow[],
     handlerInstances: object[],
-  ): OrkoWorkflow[] {
+  ): SynkroWorkflow[] {
     // Collect all decorated workflow step handlers
     const stepHandlers = handlerInstances.flatMap((instance) =>
       discoverWorkflowStepHandlers(instance),

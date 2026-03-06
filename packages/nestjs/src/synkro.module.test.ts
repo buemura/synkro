@@ -2,10 +2,10 @@ import "reflect-metadata";
 import { describe, it, expect, vi } from "vitest";
 import { Test } from "@nestjs/testing";
 import { Injectable } from "@nestjs/common";
-import type { HandlerCtx } from "@orko/core";
+import type { HandlerCtx } from "@synkro/core";
 
-import { OrkoModule } from "./orko.module.js";
-import { OrkoService } from "./orko.service.js";
+import { SynkroModule } from "./synkro.module.js";
+import { SynkroService } from "./synkro.service.js";
 import { OnEvent } from "./decorators/on-event.decorator.js";
 import { OnWorkflowStep } from "./decorators/on-workflow-step.decorator.js";
 
@@ -35,21 +35,21 @@ class TestWorkflowHandler {
   }
 }
 
-describe("OrkoModule", () => {
+describe("SynkroModule", () => {
   describe("forRoot", () => {
-    it("should provide OrkoService", async () => {
+    it("should provide SynkroService", async () => {
       const module = await Test.createTestingModule({
         imports: [
-          OrkoModule.forRoot({
+          SynkroModule.forRoot({
             transport: "in-memory",
           }),
         ],
       }).compile();
 
       await module.init();
-      const service = module.get(OrkoService);
+      const service = module.get(SynkroService);
       expect(service).toBeDefined();
-      expect(service).toBeInstanceOf(OrkoService);
+      expect(service).toBeInstanceOf(SynkroService);
 
       await module.close();
     });
@@ -57,14 +57,14 @@ describe("OrkoModule", () => {
     it("should expose publish method", async () => {
       const module = await Test.createTestingModule({
         imports: [
-          OrkoModule.forRoot({
+          SynkroModule.forRoot({
             transport: "in-memory",
           }),
         ],
       }).compile();
 
       await module.init();
-      const service = module.get(OrkoService);
+      const service = module.get(SynkroService);
       expect(typeof service.publish).toBe("function");
 
       await module.close();
@@ -73,14 +73,14 @@ describe("OrkoModule", () => {
     it("should expose on method", async () => {
       const module = await Test.createTestingModule({
         imports: [
-          OrkoModule.forRoot({
+          SynkroModule.forRoot({
             transport: "in-memory",
           }),
         ],
       }).compile();
 
       await module.init();
-      const service = module.get(OrkoService);
+      const service = module.get(SynkroService);
       expect(typeof service.on).toBe("function");
 
       await module.close();
@@ -88,10 +88,10 @@ describe("OrkoModule", () => {
   });
 
   describe("forRootAsync", () => {
-    it("should provide OrkoService with async config", async () => {
+    it("should provide SynkroService with async config", async () => {
       const module = await Test.createTestingModule({
         imports: [
-          OrkoModule.forRootAsync({
+          SynkroModule.forRootAsync({
             useFactory: () => ({
               transport: "in-memory" as const,
             }),
@@ -100,9 +100,9 @@ describe("OrkoModule", () => {
       }).compile();
 
       await module.init();
-      const service = module.get(OrkoService);
+      const service = module.get(SynkroService);
       expect(service).toBeDefined();
-      expect(service).toBeInstanceOf(OrkoService);
+      expect(service).toBeInstanceOf(SynkroService);
 
       await module.close();
     });
@@ -112,7 +112,7 @@ describe("OrkoModule", () => {
     it("should discover and register @OnEvent handlers", async () => {
       const module = await Test.createTestingModule({
         imports: [
-          OrkoModule.forRoot({
+          SynkroModule.forRoot({
             transport: "in-memory",
           }),
         ],
@@ -120,7 +120,7 @@ describe("OrkoModule", () => {
       }).compile();
 
       await module.init();
-      const service = module.get(OrkoService);
+      const service = module.get(SynkroService);
 
       // Publishing should invoke the discovered handler
       await service.publish("TestEvent", { data: "hello" });
@@ -144,7 +144,7 @@ describe("OrkoModule", () => {
     it("should discover and patch @OnWorkflowStep handlers into workflows", async () => {
       const module = await Test.createTestingModule({
         imports: [
-          OrkoModule.forRoot({
+          SynkroModule.forRoot({
             transport: "in-memory",
             workflows: [
               {
@@ -161,7 +161,7 @@ describe("OrkoModule", () => {
       }).compile();
 
       await module.init();
-      const service = module.get(OrkoService);
+      const service = module.get(SynkroService);
 
       await service.publish("TestWorkflow", { orderId: "123" });
 
@@ -177,10 +177,10 @@ describe("OrkoModule", () => {
   });
 
   describe("lifecycle", () => {
-    it("should stop orko on module destroy", async () => {
+    it("should stop synkro on module destroy", async () => {
       const module = await Test.createTestingModule({
         imports: [
-          OrkoModule.forRoot({
+          SynkroModule.forRoot({
             transport: "in-memory",
           }),
         ],

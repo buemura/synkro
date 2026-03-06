@@ -1,7 +1,7 @@
 {
-  "name": "@orko/next",
+  "name": "@synkro/next",
   "version": "0.1.0",
-  "description": "Next.js integration for @orko/core",
+  "description": "Next.js integration for @synkro/core",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -33,17 +33,17 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/buemura/orko.git"
+    "url": "https://github.com/buemura/synkro.git"
   },
-  "homepage": "https://github.com/buemura/orko/packages/next#readme",
+  "homepage": "https://github.com/buemura/synkro/packages/next#readme",
   "peerDependencies": {
-    "@orko/core": "^0.1.0",
-    "@orko/ui": "^0.1.1",
+    "@synkro/core": "^0.1.0",
+    "@synkro/ui": "^0.1.1",
     "next": "^14.0.0 || ^15.0.0 || ^16.0.0"
   },
   "devDependencies": {
-    "@orko/core": "workspace:*",
-    "@orko/ui": "workspace:*",
+    "@synkro/core": "workspace:*",
+    "@synkro/ui": "workspace:*",
     "next": "^16.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.18"

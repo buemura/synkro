@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { describe, it, expect } from "vitest";
 import { OnWorkflowStep } from "./on-workflow-step.decorator.js";
-import { ON_WORKFLOW_STEP_METADATA } from "../orko.constants.js";
+import { ON_WORKFLOW_STEP_METADATA } from "../synkro.constants.js";
 
 describe("@OnWorkflowStep", () => {
   it("should set metadata with workflow name and step type", () => {

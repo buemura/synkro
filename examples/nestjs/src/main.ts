@@ -1,22 +1,22 @@
 import "reflect-metadata";
 
 import { NestFactory } from "@nestjs/core";
-import { OrkoService } from "@orko/nestjs";
-import { createDashboardHandler } from "@orko/ui";
+import { SynkroService } from "@synkro/nestjs";
+import { createDashboardHandler } from "@synkro/ui";
 
 import { AppModule } from "./app.module.js";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  const orkoService = app.get(OrkoService);
+  const synkroService = app.get(SynkroService);
   const expressApp = app.getHttpAdapter().getInstance();
 
   let dashboardHandler: ReturnType<typeof createDashboardHandler> | null = null;
-  expressApp.use("/orko", (req: any, res: any) => {
+  expressApp.use("/synkro", (req: any, res: any) => {
     if (!dashboardHandler) {
-      dashboardHandler = createDashboardHandler(orkoService.getInstance(), {
-        basePath: "/orko",
+      dashboardHandler = createDashboardHandler(synkroService.getInstance(), {
+        basePath: "/synkro",
       });
     }
     dashboardHandler(req, res);
@@ -24,7 +24,7 @@ async function bootstrap() {
 
   await app.listen(3000);
   console.log("Server is running on http://localhost:3000");
-  console.log("Orko Dashboard: http://localhost:3000/orko");
+  console.log("Synkro Dashboard: http://localhost:3000/synkro");
 }
 
 bootstrap();

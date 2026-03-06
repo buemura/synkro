@@ -1,4 +1,4 @@
-export { Orko } from "./orko.js";
+export { Synkro } from "./synkro.js";
 export { OnEvent, OnWorkflowStep } from "./handlers/index.js";
 export type { TransportManager } from "./transport/index.js";
 export type {
@@ -8,11 +8,11 @@ export type {
   HandlerFunction,
   PublishFunction,
   RetryConfig,
-  OrkoEvent,
-  OrkoIntrospection,
-  OrkoOptions,
-  OrkoWorkflow,
-  OrkoWorkflowStep,
+  SynkroEvent,
+  SynkroIntrospection,
+  SynkroOptions,
+  SynkroWorkflow,
+  SynkroWorkflowStep,
   WorkflowInfo,
   WorkflowStepInfo,
 } from "./types.js";

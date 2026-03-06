@@ -2,13 +2,13 @@ export type RetryConfig = {
   maxRetries: number;
 };
 
-export type OrkoEvent = {
+export type SynkroEvent = {
   type: string;
   handler: HandlerFunction;
   retry?: RetryConfig;
 };
 
-export type OrkoWorkflowStep = {
+export type SynkroWorkflowStep = {
   type: string;
   handler?: HandlerFunction;
   retry?: RetryConfig;
@@ -16,20 +16,20 @@ export type OrkoWorkflowStep = {
   onFailure?: string;
 };
 
-export type OrkoWorkflow = {
+export type SynkroWorkflow = {
   name: string;
-  steps: OrkoWorkflowStep[];
+  steps: SynkroWorkflowStep[];
   onComplete?: string;
   onSuccess?: string;
   onFailure?: string;
 };
 
-export type OrkoOptions = {
+export type SynkroOptions = {
   transport: "redis" | "in-memory";
   connectionUrl?: string;
   debug?: boolean;
-  events?: OrkoEvent[];
-  workflows?: OrkoWorkflow[];
+  events?: SynkroEvent[];
+  workflows?: SynkroWorkflow[];
   handlers?: object[];
 };
 
@@ -68,7 +68,7 @@ export type WorkflowInfo = {
   onFailure?: string;
 };
 
-export type OrkoIntrospection = {
+export type SynkroIntrospection = {
   events: EventInfo[];
   workflows: WorkflowInfo[];
 };

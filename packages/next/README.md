@@ -1,22 +1,22 @@
-# @orko/next
+# @synkro/next
 
-Next.js integration for [@orko/core](https://www.npmjs.com/package/@orko/core).
+Next.js integration for [@synkro/core](https://www.npmjs.com/package/@synkro/core).
 
 ## Installation
 
 ```bash
-npm install @orko/next @orko/core @orko/ui
+npm install @synkro/next @synkro/core @synkro/ui
 ```
 
 ## Quick Start
 
-### 1. Create the orko instance
+### 1. Create the synkro instance
 
 ```typescript
-// lib/orko.ts
-import { createOrko, createDashboardHandler } from "@orko/next";
+// lib/synkro.ts
+import { createSynkro, createDashboardHandler } from "@synkro/next";
 
-export const orko = createOrko({
+export const synkro = createSynkro({
   transport: "redis",
   connectionUrl: process.env.REDIS_URL || "redis://localhost:6379",
   events: [
@@ -43,8 +43,8 @@ export const orko = createOrko({
   ],
 });
 
-export const dashboardHandler = createDashboardHandler(orko, {
-  basePath: "/orko",
+export const dashboardHandler = createDashboardHandler(synkro, {
+  basePath: "/synkro",
 });
 ```
 
@@ -54,11 +54,11 @@ The instance is lazily initialized on the first call and cached as a singleton a
 
 ```typescript
 // app/api/orders/route.ts
-import { orko } from "@/lib/orko";
+import { synkro } from "@/lib/synkro";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const requestId = await orko.publish("ProcessOrder", body);
+  const requestId = await synkro.publish("ProcessOrder", body);
   return Response.json({ requestId }, { status: 201 });
 }
 ```
@@ -66,19 +66,19 @@ export async function POST(request: Request) {
 ### 3. Mount the dashboard
 
 ```typescript
-// app/orko/[[...path]]/route.ts
-import { dashboardHandler } from "@/lib/orko";
+// app/synkro/[[...path]]/route.ts
+import { dashboardHandler } from "@/lib/synkro";
 
 export { dashboardHandler as GET };
 ```
 
-The dashboard is now available at `/orko`.
+The dashboard is now available at `/synkro`.
 
 ### 4. Define handlers in separate files
 
 ```typescript
 // handlers/validate-order.handler.ts
-import type { HandlerCtx } from "@orko/core";
+import type { HandlerCtx } from "@synkro/core";
 
 export const validateOrderHandler = async ({
   requestId,
@@ -90,11 +90,11 @@ export const validateOrderHandler = async ({
 
 ## API
 
-### `createOrko(options)`
+### `createSynkro(options)`
 
-Creates a lazy-initializing orko client. Accepts the same options as `Orko.start()` from `@orko/core`.
+Creates a lazy-initializing synkro client. Accepts the same options as `Synkro.start()` from `@synkro/core`.
 
-Returns a `OrkoClient` with the following methods:
+Returns a `SynkroClient` with the following methods:
 
 | Method                                 | Description                                        |
 | -------------------------------------- | -------------------------------------------------- |
@@ -102,12 +102,12 @@ Returns a `OrkoClient` with the following methods:
 | `on(eventType, handler, retry?)`       | Register an event handler at runtime               |
 | `introspect()`                         | Get metadata about registered events and workflows |
 | `getEventMetrics(eventType)`           | Get received/completed/failed counts for an event  |
-| `getInstance()`                        | Get the underlying `Orko` instance                 |
+| `getInstance()`                        | Get the underlying `Synkro` instance                 |
 | `stop()`                               | Disconnect and clean up                            |
 
-### `createDashboardHandler(orko, options?)`
+### `createDashboardHandler(synkro, options?)`
 
-Creates a Next.js route handler for the `@orko/ui` dashboard.
+Creates a Next.js route handler for the `@synkro/ui` dashboard.
 
 | Option     | Type     | Default | Description                                    |
 | ---------- | -------- | ------- | ---------------------------------------------- |

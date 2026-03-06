@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { describe, it, expect } from "vitest";
 import { OnEvent } from "./on-event.decorator.js";
-import { ON_EVENT_METADATA } from "../orko.constants.js";
+import { ON_EVENT_METADATA } from "../synkro.constants.js";
 
 describe("@OnEvent", () => {
   it("should set metadata with event type", () => {

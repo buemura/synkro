@@ -1,5 +1,5 @@
 {
-  "name": "orko",
+  "name": "synkro",
   "private": true,
   "scripts": {
     "build": "pnpm --filter './packages/*' run build",

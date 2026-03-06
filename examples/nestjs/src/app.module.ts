@@ -1,11 +1,11 @@
 import { Module } from "@nestjs/common";
-import { OrkoModule } from "@orko/nestjs";
+import { SynkroModule } from "@synkro/nestjs";
 import { orderWorkflows } from "./order/order-workflow.config.js";
 import { OrderModule } from "./order/order.module.js";
 
 @Module({
   imports: [
-    OrkoModule.forRoot({
+    SynkroModule.forRoot({
       transport: "redis",
       connectionUrl: "redis://localhost:6379",
       debug: true,

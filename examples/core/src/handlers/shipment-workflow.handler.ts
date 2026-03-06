@@ -1,4 +1,4 @@
-import { OnWorkflowStep, type HandlerCtx } from "@orko/core";
+import { OnWorkflowStep, type HandlerCtx } from "@synkro/core";
 
 import { db } from "../db";
 

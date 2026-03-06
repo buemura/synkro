@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createOrko } from "./orko.js";
+import { createSynkro } from "./synkro.js";
 
-vi.mock("@orko/core", () => {
+vi.mock("@synkro/core", () => {
   const mockInstance = {
     publish: vi.fn().mockResolvedValue("req-123"),
     on: vi.fn(),
@@ -17,23 +17,23 @@ vi.mock("@orko/core", () => {
   };
 
   return {
-    Orko: {
+    Synkro: {
       start: vi.fn().mockResolvedValue(mockInstance),
     },
   };
 });
 
-describe("createOrko", () => {
+describe("createSynkro", () => {
   // Reset globalThis between tests
-  const GLOBAL_KEY = "__orko_instance__";
+  const GLOBAL_KEY = "__synkro_instance__";
 
   beforeEach(() => {
     delete (globalThis as Record<string, unknown>)[GLOBAL_KEY];
     vi.clearAllMocks();
   });
 
-  it("should create a orko client", () => {
-    const client = createOrko({ transport: "in-memory" });
+  it("should create a synkro client", () => {
+    const client = createSynkro({ transport: "in-memory" });
     expect(client).toBeDefined();
     expect(client.publish).toBeTypeOf("function");
     expect(client.on).toBeTypeOf("function");
@@ -44,29 +44,29 @@ describe("createOrko", () => {
   });
 
   it("should lazily initialize on publish", async () => {
-    const { Orko } = await import("@orko/core");
-    const client = createOrko({ transport: "in-memory" });
+    const { Synkro } = await import("@synkro/core");
+    const client = createSynkro({ transport: "in-memory" });
 
-    expect(Orko.start).not.toHaveBeenCalled();
+    expect(Synkro.start).not.toHaveBeenCalled();
 
     const requestId = await client.publish("test-event", { foo: "bar" });
 
-    expect(Orko.start).toHaveBeenCalledWith({ transport: "in-memory" });
+    expect(Synkro.start).toHaveBeenCalledWith({ transport: "in-memory" });
     expect(requestId).toBe("req-123");
   });
 
   it("should reuse the same instance across calls", async () => {
-    const { Orko } = await import("@orko/core");
-    const client = createOrko({ transport: "in-memory" });
+    const { Synkro } = await import("@synkro/core");
+    const client = createSynkro({ transport: "in-memory" });
 
     await client.publish("event-1");
     await client.publish("event-2");
 
-    expect(Orko.start).toHaveBeenCalledTimes(1);
+    expect(Synkro.start).toHaveBeenCalledTimes(1);
   });
 
   it("should clean up on stop", async () => {
-    const client = createOrko({ transport: "in-memory" });
+    const client = createSynkro({ transport: "in-memory" });
     await client.publish("test");
 
     expect((globalThis as Record<string, unknown>)[GLOBAL_KEY]).toBeDefined();

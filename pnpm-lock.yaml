@@ -9,10 +9,10 @@ importers:
 
   examples/core:
     dependencies:
-      "@orko/core":
+      "@synkro/core":
         specifier: workspace:*
         version: link:../../packages/core
-      "@orko/ui":
+      "@synkro/ui":
         specifier: workspace:*
         version: link:../../packages/ui
       dotenv:
@@ -46,13 +46,13 @@ importers:
       "@nestjs/platform-express":
         specifier: ^11.0.0
         version: 11.1.16(@nestjs/common@11.1.16(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.16)
-      "@orko/core":
+      "@synkro/core":
         specifier: workspace:*
         version: link:../../packages/core
-      "@orko/nestjs":
+      "@synkro/nestjs":
         specifier: workspace:*
         version: link:../../packages/nestjs
-      "@orko/ui":
+      "@synkro/ui":
         specifier: workspace:*
         version: link:../../packages/ui
       reflect-metadata:
@@ -74,13 +74,13 @@ importers:
 
   examples/nextjs:
     dependencies:
-      "@orko/core":
+      "@synkro/core":
         specifier: workspace:*
         version: link:../../packages/core
-      "@orko/next":
+      "@synkro/next":
         specifier: workspace:*
         version: link:../../packages/next
-      "@orko/ui":
+      "@synkro/ui":
         specifier: workspace:*
         version: link:../../packages/ui
       next:
@@ -133,7 +133,7 @@ importers:
       "@nestjs/testing":
         specifier: ^11.1.15
         version: 11.1.16(@nestjs/common@11.1.16(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.16)(@nestjs/platform-express@11.1.16)
-      "@orko/core":
+      "@synkro/core":
         specifier: workspace:*
         version: link:../core
       "@swc/core":
@@ -160,10 +160,10 @@ importers:
 
   packages/next:
     devDependencies:
-      "@orko/core":
+      "@synkro/core":
         specifier: workspace:*
         version: link:../core
-      "@orko/ui":
+      "@synkro/ui":
         specifier: workspace:*
         version: link:../ui
       next:
@@ -178,7 +178,7 @@ importers:
 
   packages/ui:
     devDependencies:
-      "@orko/core":
+      "@synkro/core":
         specifier: workspace:*
         version: link:../core
       "@types/node":

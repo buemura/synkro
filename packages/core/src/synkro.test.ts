@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Orko } from "./orko.js";
+import { Synkro } from "./synkro.js";
 
 const mockPublish = vi.fn();
 const mockSubscribe = vi.fn().mockResolvedValue(1);
@@ -22,22 +22,22 @@ vi.mock("ioredis", () => {
   return { Redis: MockRedis };
 });
 
-describe("Orko", () => {
+describe("Synkro", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe("start", () => {
     it("should create an instance with minimal options", async () => {
-      const instance = await Orko.start({
+      const instance = await Synkro.start({
         connectionUrl: "redis://localhost:6379",
       });
-      expect(instance).toBeInstanceOf(Orko);
+      expect(instance).toBeInstanceOf(Synkro);
     });
 
     it("should register events provided in options", async () => {
       const handler = vi.fn();
-      await Orko.start({
+      await Synkro.start({
         connectionUrl: "redis://localhost:6379",
         events: [{ type: "user:created", handler }],
       });
@@ -47,7 +47,7 @@ describe("Orko", () => {
 
     it("should register workflows provided in options", async () => {
       const handler = vi.fn();
-      await Orko.start({
+      await Synkro.start({
         connectionUrl: "redis://localhost:6379",
         workflows: [
           {
@@ -64,7 +64,7 @@ describe("Orko", () => {
 
   describe("on", () => {
     it("should register a handler at runtime", async () => {
-      const instance = await Orko.start({
+      const instance = await Synkro.start({
         connectionUrl: "redis://localhost:6379",
       });
 
@@ -77,7 +77,7 @@ describe("Orko", () => {
 
   describe("publish", () => {
     it("should publish an event with a generated requestId", async () => {
-      const instance = await Orko.start({
+      const instance = await Synkro.start({
         connectionUrl: "redis://localhost:6379",
       });
 
@@ -94,7 +94,7 @@ describe("Orko", () => {
     });
 
     it("should use a custom requestId when provided", async () => {
-      const instance = await Orko.start({
+      const instance = await Synkro.start({
         connectionUrl: "redis://localhost:6379",
       });
 
@@ -115,7 +115,7 @@ describe("Orko", () => {
 
     it("should start a workflow when event matches a workflow name", async () => {
       const handler = vi.fn();
-      const instance = await Orko.start({
+      const instance = await Synkro.start({
         connectionUrl: "redis://localhost:6379",
         workflows: [
           {
@@ -140,7 +140,7 @@ describe("Orko", () => {
     });
 
     it("should publish as a regular event when no workflow matches", async () => {
-      const instance = await Orko.start({
+      const instance = await Synkro.start({
         connectionUrl: "redis://localhost:6379",
       });
 
@@ -155,7 +155,7 @@ describe("Orko", () => {
 
   describe("stop", () => {
     it("should disconnect all Redis clients", async () => {
-      const instance = await Orko.start({
+      const instance = await Synkro.start({
         connectionUrl: "redis://localhost:6379",
       });
 

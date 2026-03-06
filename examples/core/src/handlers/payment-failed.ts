@@ -1,4 +1,4 @@
-import { HandlerCtx } from "@orko/core";
+import { HandlerCtx } from "@synkro/core";
 
 import { db } from "../db";
 

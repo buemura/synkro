@@ -1,11 +1,11 @@
-import { createDashboardHandler, createOrko } from "@orko/next";
+import { createDashboardHandler, createSynkro } from "@synkro/next";
 
 import { confirmOrderHandler } from "@/handlers/confirm-order.handler";
 import { orderCreatedHandler } from "@/handlers/order-created.handler";
 import { processPaymentHandler } from "@/handlers/process-payment.handler";
 import { validateOrderHandler } from "@/handlers/validate-order.handler";
 
-export const orko = createOrko({
+export const synkro = createSynkro({
   transport: "redis",
   connectionUrl: process.env.REDIS_URL || "redis://localhost:6379",
   debug: true,
@@ -37,6 +37,6 @@ export const orko = createOrko({
   ],
 });
 
-export const dashboardHandler = createDashboardHandler(orko, {
-  basePath: "/orko",
+export const dashboardHandler = createDashboardHandler(synkro, {
+  basePath: "/synkro",
 });

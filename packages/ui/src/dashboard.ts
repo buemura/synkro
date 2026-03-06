@@ -4,10 +4,10 @@ export function getDashboardHtml(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Orko Dashboard</title>
+  <title>Synkro Dashboard</title>
   <script>
     (function() {
-      var t = localStorage.getItem('orko-theme');
+      var t = localStorage.getItem('synkro-theme');
       if (t === 'light') document.documentElement.classList.remove('dark');
     })();
   </script>
@@ -72,8 +72,8 @@ export function getDashboardHtml(): string {
   <div class="max-w-[1200px] mx-auto py-8 px-6">
     <header class="flex items-center justify-between mb-10">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-base text-white">O</div>
-        <h1 class="text-[22px] font-semibold tracking-tight">Orko <span class="text-txt-muted font-normal text-sm ml-2">Dashboard</span></h1>
+        <div class="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-base text-white">S</div>
+        <h1 class="text-[22px] font-semibold tracking-tight">Synkro <span class="text-txt-muted font-normal text-sm ml-2">Dashboard</span></h1>
       </div>
       <div class="flex items-center gap-2">
         <button class="bg-surface border border-border text-txt w-9 h-9 rounded-lg cursor-pointer text-base transition-colors inline-flex items-center justify-center hover:bg-surface-hover" id="theme-toggle" title="Toggle theme"></button>
@@ -100,7 +100,7 @@ export function getDashboardHtml(): string {
       var html = document.documentElement;
       html.classList.toggle('dark');
       var theme = isDark() ? 'dark' : 'light';
-      localStorage.setItem('orko-theme', theme);
+      localStorage.setItem('synkro-theme', theme);
       updateThemeIcon();
       // Redraw flow connections since colors may change
       requestAnimationFrame(drawFlowConnections);
@@ -157,7 +157,7 @@ export function getDashboardHtml(): string {
       } catch (err) {
         document.getElementById('content').innerHTML =
           '<div class="text-center p-12 text-txt-muted bg-surface border border-border rounded-[10px]"><p class="text-sm">Failed to load data. Check the console for errors.</p></div>';
-        console.error('Orko Dashboard: Failed to fetch introspection data', err);
+        console.error('Synkro Dashboard: Failed to fetch introspection data', err);
       }
     }
 
@@ -176,7 +176,7 @@ export function getDashboardHtml(): string {
       } catch (err) {
         document.getElementById('content').innerHTML =
           '<div class="text-center p-12 text-txt-muted bg-surface border border-border rounded-[10px]"><p class="text-sm">Failed to load event data.</p></div>';
-        console.error('Orko Dashboard: Failed to fetch event metrics', err);
+        console.error('Synkro Dashboard: Failed to fetch event metrics', err);
       }
     }
 
@@ -199,7 +199,7 @@ export function getDashboardHtml(): string {
       } catch (err) {
         document.getElementById('content').innerHTML =
           '<div class="text-center p-12 text-txt-muted bg-surface border border-border rounded-[10px]"><p class="text-sm">Failed to load workflow data.</p></div>';
-        console.error('Orko Dashboard: Failed to fetch workflow data', err);
+        console.error('Synkro Dashboard: Failed to fetch workflow data', err);
       }
     }
 

@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { OnEvent } from "@orko/nestjs";
-import type { HandlerCtx } from "@orko/core";
+import { OnEvent } from "@synkro/nestjs";
+import type { HandlerCtx } from "@synkro/core";
 import { OrderEvent } from "./order.events.js";
 
 @Injectable()

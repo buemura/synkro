@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Orko } from "../orko.js";
+import { Synkro } from "../synkro.js";
 import { OnEvent, OnWorkflowStep, ON_EVENT_META, ON_WORKFLOW_STEP_META } from "./decorators.js";
 import { discoverEventHandlers, discoverWorkflowStepHandlers } from "./handler-discovery.js";
 import type { HandlerCtx } from "../types.js";
@@ -132,7 +132,7 @@ describe("Handler Discovery", () => {
   });
 });
 
-describe("Orko with decorators", () => {
+describe("Synkro with decorators", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -143,7 +143,7 @@ describe("Orko with decorators", () => {
       async handle(_ctx: HandlerCtx) {}
     }
 
-    await Orko.start({
+    await Synkro.start({
       connectionUrl: "redis://localhost:6379",
       handlers: [new MyHandlers()],
     });
@@ -157,7 +157,7 @@ describe("Orko with decorators", () => {
       async validate(_ctx: HandlerCtx) {}
     }
 
-    await Orko.start({
+    await Synkro.start({
       connectionUrl: "redis://localhost:6379",
       workflows: [
         {
@@ -179,7 +179,7 @@ describe("Orko with decorators", () => {
       async validate(_ctx: HandlerCtx) {}
     }
 
-    await Orko.start({
+    await Synkro.start({
       connectionUrl: "redis://localhost:6379",
       workflows: [
         {
@@ -208,7 +208,7 @@ describe("Orko with decorators", () => {
       async validate(_ctx: HandlerCtx) {}
     }
 
-    await Orko.start({
+    await Synkro.start({
       connectionUrl: "redis://localhost:6379",
       workflows: [
         {
@@ -225,7 +225,7 @@ describe("Orko with decorators", () => {
 
   it("should throw when a workflow step has no handler", async () => {
     await expect(
-      Orko.start({
+      Synkro.start({
         connectionUrl: "redis://localhost:6379",
         workflows: [
           {
@@ -245,7 +245,7 @@ describe("Orko with decorators", () => {
       async handle(_ctx: HandlerCtx) {}
     }
 
-    const instance = await Orko.start({
+    const instance = await Synkro.start({
       connectionUrl: "redis://localhost:6379",
     });
 

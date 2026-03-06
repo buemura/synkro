@@ -1,6 +1,6 @@
-import type { OrkoOptions } from "@orko/core";
+import type { SynkroOptions } from "@synkro/core";
 
-export type OrkoNextOptions = OrkoOptions;
+export type SynkroNextOptions = SynkroOptions;
 
 export type DashboardHandlerOptions = {
   basePath?: string;

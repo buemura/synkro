@@ -84,7 +84,7 @@ export default function OrderDetailPage() {
         <a href="/orders" style={styles.link}>
           &larr; Create another order
         </a>
-        <a href="/orko" style={styles.link}>
+        <a href="/synkro" style={styles.link}>
           View Dashboard
         </a>
       </div>

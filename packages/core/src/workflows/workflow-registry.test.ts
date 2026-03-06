@@ -6,7 +6,7 @@ function flushPromises(): Promise<void> {
 import { WorkflowRegistry } from "./workflow-registry.js";
 import type { HandlerRegistry } from "../handlers/handler-registry.js";
 import type { RedisManager } from "../transport/redis.js";
-import type { OrkoWorkflow } from "../types.js";
+import type { SynkroWorkflow } from "../types.js";
 
 function createMockRedis(): RedisManager {
   return {
@@ -25,7 +25,7 @@ function createMockHandlerRegistry(): HandlerRegistry {
   } as unknown as HandlerRegistry;
 }
 
-function createTestWorkflow(): OrkoWorkflow {
+function createTestWorkflow(): SynkroWorkflow {
   return {
     name: "order-processing",
     steps: [
@@ -272,7 +272,7 @@ describe("WorkflowRegistry", () => {
   });
 
   describe("conditional routing", () => {
-    function createConditionalWorkflow(): OrkoWorkflow {
+    function createConditionalWorkflow(): SynkroWorkflow {
       return {
         name: "doc-processing",
         steps: [
@@ -389,7 +389,7 @@ describe("WorkflowRegistry", () => {
     });
 
     it("should mark workflow as failed when handler fails without onFailure", async () => {
-      const workflow: OrkoWorkflow = {
+      const workflow: SynkroWorkflow = {
         name: "simple-workflow",
         steps: [
           { type: "step1", handler: vi.fn() },
@@ -471,7 +471,7 @@ describe("WorkflowRegistry", () => {
     });
 
     it("should skip sibling branch targets and advance to the next regular step", async () => {
-      const workflow: OrkoWorkflow = {
+      const workflow: SynkroWorkflow = {
         name: "order-flow",
         steps: [
           {
@@ -556,7 +556,7 @@ describe("WorkflowRegistry", () => {
 
   describe("workflow chaining", () => {
     it("should trigger onSuccess workflow when workflow completes", async () => {
-      const workflows: OrkoWorkflow[] = [
+      const workflows: SynkroWorkflow[] = [
         {
           name: "process-order",
           steps: [{ type: "validate", handler: vi.fn() }],
@@ -596,7 +596,7 @@ describe("WorkflowRegistry", () => {
     });
 
     it("should trigger onFailure workflow when workflow fails", async () => {
-      const workflows: OrkoWorkflow[] = [
+      const workflows: SynkroWorkflow[] = [
         {
           name: "process-order",
           steps: [{ type: "validate", handler: vi.fn() }],
@@ -635,7 +635,7 @@ describe("WorkflowRegistry", () => {
     });
 
     it("should trigger onComplete workflow regardless of outcome", async () => {
-      const workflows: OrkoWorkflow[] = [
+      const workflows: SynkroWorkflow[] = [
         {
           name: "process-order",
           steps: [{ type: "validate", handler: vi.fn() }],
@@ -674,7 +674,7 @@ describe("WorkflowRegistry", () => {
     });
 
     it("should trigger both onSuccess and onComplete on success", async () => {
-      const workflows: OrkoWorkflow[] = [
+      const workflows: SynkroWorkflow[] = [
         {
           name: "process-order",
           steps: [{ type: "validate", handler: vi.fn() }],
@@ -722,7 +722,7 @@ describe("WorkflowRegistry", () => {
     });
 
     it("should not trigger onSuccess when workflow fails", async () => {
-      const workflows: OrkoWorkflow[] = [
+      const workflows: SynkroWorkflow[] = [
         {
           name: "process-order",
           steps: [{ type: "validate", handler: vi.fn() }],

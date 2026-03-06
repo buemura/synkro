@@ -1,7 +1,7 @@
 import type { RetryConfig } from "../types.js";
 
-export const ON_EVENT_META = Symbol.for("orko:on-event");
-export const ON_WORKFLOW_STEP_META = Symbol.for("orko:on-workflow-step");
+export const ON_EVENT_META = Symbol.for("synkro:on-event");
+export const ON_WORKFLOW_STEP_META = Symbol.for("synkro:on-workflow-step");
 
 export type OnEventMetadata = {
   eventType: string;

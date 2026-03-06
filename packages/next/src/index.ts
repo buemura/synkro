@@ -1,4 +1,4 @@
-export { createOrko } from "./orko.js";
-export type { OrkoClient } from "./orko.js";
+export { createSynkro } from "./synkro.js";
+export type { SynkroClient } from "./synkro.js";
 export { createDashboardHandler } from "./handler.js";
-export type { OrkoNextOptions, DashboardHandlerOptions } from "./types.js";
+export type { SynkroNextOptions, DashboardHandlerOptions } from "./types.js";

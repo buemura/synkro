@@ -1,4 +1,4 @@
-import type { HandlerCtx } from "@orko/core";
+import type { HandlerCtx } from "@synkro/core";
 
 export const orderCreatedHandler = async ({
   requestId,

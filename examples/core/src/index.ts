@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import { createDashboardHandler } from "@orko/ui";
+import { createDashboardHandler } from "@synkro/ui";
 import express, { Request, Response } from "express";
 
 import { db } from "./db";
@@ -26,8 +26,8 @@ app.post("/orders", async (req: Request, res: Response) => {
 
   const order = db.insertOrder({ productId, quantity, amount: String(amount) });
 
-  const orko = await eventManagerSetup();
-  await orko.publish("ProcessOrder", {
+  const synkro = await eventManagerSetup();
+  await synkro.publish("ProcessOrder", {
     orderId: order.id,
     productId,
     quantity,
@@ -61,20 +61,20 @@ app.get("/orders/:orderId/payments", async (req: Request, res: Response) => {
 app.post("/publish", async (req: Request, res: Response) => {
   const { eventType, payload } = req.body;
 
-  const orko = await eventManagerSetup();
-  await orko.publish(eventType, payload);
+  const synkro = await eventManagerSetup();
+  await synkro.publish(eventType, payload);
 
   res.status(201).json(null);
 });
 
 async function bootstrap() {
-  const orko = await eventManagerSetup();
+  const synkro = await eventManagerSetup();
 
-  app.use("/orko", createDashboardHandler(orko, { basePath: "/orko" }));
+  app.use("/synkro", createDashboardHandler(synkro, { basePath: "/synkro" }));
 
   app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    console.log(`Orko Dashboard: http://localhost:${PORT}/orko`);
+    console.log(`Synkro Dashboard: http://localhost:${PORT}/synkro`);
   });
 }
 
