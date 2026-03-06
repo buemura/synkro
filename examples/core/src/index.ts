@@ -7,7 +7,7 @@ import { db } from "./db";
 import { eventManagerSetup } from "./events/event-manager";
 
 const app = express();
-const PORT = 3000;
+const PORT = 3001;
 
 app.use(express.json());
 

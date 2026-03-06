@@ -19,9 +19,10 @@ Lightweight event-driven workflow orchestrator for Node.js. Define standalone ev
 
 | Package                             | Description                                           | Version |
 | ----------------------------------- | ----------------------------------------------------- | ------- |
-| [@synkro/core](./packages/core)     | Core orchestrator with Redis and in-memory transports | 0.7.0   |
-| [@synkro/ui](./packages/ui)         | Web dashboard for visualizing events and workflows    | 0.1.0   |
-| [@synkro/nestjs](./packages/nestjs) | NestJS integration module                             | 0.4.0   |
+| [@synkro/core](./packages/core)     | Core orchestrator with Redis and in-memory transports | 0.8.0   |
+| [@synkro/ui](./packages/ui)         | Web dashboard for visualizing events and workflows    | 0.1.1   |
+| [@synkro/nestjs](./packages/nestjs) | NestJS integration module                             | 0.4.3   |
+| [@synkro/nextjs](./packages/nextjs) | Next.js integration                                   | 0.1.0   |
 
 ## Quick Start
 
@@ -108,7 +109,8 @@ Click any workflow to see a branching flow diagram with SVG connectors and a det
 - **[@synkro/core](./packages/core)** — Full API reference, workflow configuration, conditional routing, chaining, and retry
 - **[@synkro/ui](./packages/ui)** — Dashboard setup, served routes, and configuration options
 - **[@synkro/nestjs](./packages/nestjs)** — NestJS module registration and usage
-- **[Examples](./examples/core)** — Working Express example with events, workflows, and dashboard
+- **[@synkro/nextjs](./packages/nextjs)** — Next.js integration with route handlers and dashboard
+- **[Examples](./examples)** — Working examples with Express, NestJS, and Next.js
 
 ## License
 
