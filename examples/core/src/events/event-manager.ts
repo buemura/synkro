@@ -1,4 +1,4 @@
-import { Synkro, type SynkroEvent, type SynkroWorkflow } from "@synkro/core";
+import { Orko, type OrkoEvent, type OrkoWorkflow } from "@orko/core";
 
 import { OrderEventHandler } from "../handlers/order-event.handler";
 import { OrderWorkflowHandler } from "../handlers/order-workflow.handler";
@@ -6,10 +6,10 @@ import { ShipmentWorkflowHandler } from "../handlers/shipment-workflow.handler";
 import { stockUpdateHandler } from "../handlers/stock-update";
 import { EventTypes, WorkflowTypes } from "./event-types";
 
-let synkro: Synkro | null = null;
+let orko: Orko | null = null;
 
 // Inline event handlers (traditional approach — still supported)
-const events: SynkroEvent[] = [
+const events: OrkoEvent[] = [
   {
     type: "test-event",
     handler: async ({ requestId }) => {
@@ -45,7 +45,7 @@ const events: SynkroEvent[] = [
 ];
 
 // Workflow definitions — handlers come from decorated classes via `handlers` option
-const workflows: SynkroWorkflow[] = [
+const workflows: OrkoWorkflow[] = [
   {
     name: WorkflowTypes.ProcessOrder,
     onSuccess: WorkflowTypes.StartShipment,
@@ -139,10 +139,10 @@ const workflows: SynkroWorkflow[] = [
   },
 ];
 
-export async function eventManagerSetup(): Promise<Synkro> {
-  if (synkro) return synkro;
+export async function eventManagerSetup(): Promise<Orko> {
+  if (orko) return orko;
 
-  synkro = await Synkro.start({
+  orko = await Orko.start({
     transport: "redis",
     connectionUrl: process.env.REDIS_URL! || "redis://localhost:6379",
     debug: true,
@@ -156,5 +156,5 @@ export async function eventManagerSetup(): Promise<Synkro> {
     ],
   });
 
-  return synkro;
+  return orko;
 }

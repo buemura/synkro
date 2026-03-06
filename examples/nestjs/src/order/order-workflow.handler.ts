@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { OnWorkflowStep } from "@synkro/nestjs";
-import type { HandlerCtx } from "@synkro/core";
+import { OnWorkflowStep } from "@orko/nestjs";
+import type { HandlerCtx } from "@orko/core";
 import { OrderEvent, OrderWorkflow } from "./order.events.js";
 import { OrderService } from "./order.service.js";
 import { ProductService } from "../product/product.service.js";

@@ -1,5 +1,5 @@
 {
-  "name": "@synkro/core",
+  "name": "@orko/core",
   "version": "0.8.0",
   "description": "Lightweight workflow and state machine orchestrator powered by Redis. Define event-driven workflows via configuration or code.",
   "main": "dist/index.js",
@@ -33,9 +33,9 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/buemura/synkro.git"
+    "url": "https://github.com/buemura/orko.git"
   },
-  "homepage": "https://github.com/buemura/synkro/packages/core#readme",
+  "homepage": "https://github.com/buemura/orko/packages/core#readme",
   "type": "module",
   "dependencies": {
     "ioredis": "^5.10.0"

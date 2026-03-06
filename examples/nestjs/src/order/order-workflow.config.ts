@@ -1,9 +1,9 @@
-import type { SynkroWorkflow } from "@synkro/core";
+import type { OrkoWorkflow } from "@orko/core";
 import { OrderEvent, OrderWorkflow } from "./order.events.js";
 
 // Handler stubs — replaced at runtime by @OnWorkflowStep decorated methods
 
-export const orderWorkflows: SynkroWorkflow[] = [
+export const orderWorkflows: OrkoWorkflow[] = [
   {
     name: OrderWorkflow.ProcessOrder,
     onSuccess: OrderWorkflow.StartShipment,

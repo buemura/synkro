@@ -1,11 +1,11 @@
-# @synkro/nestjs
+# @orko/nestjs
 
-NestJS integration module for [@synkro/core](https://www.npmjs.com/package/@synkro/core).
+NestJS integration module for [@orko/core](https://www.npmjs.com/package/@orko/core).
 
 ## Installation
 
 ```bash
-npm install @synkro/nestjs @synkro/core
+npm install @orko/nestjs @orko/core
 ```
 
 ## Quick Start
@@ -14,11 +14,11 @@ npm install @synkro/nestjs @synkro/core
 
 ```typescript
 import { Module } from "@nestjs/common";
-import { SynkroModule } from "@synkro/nestjs";
+import { OrkoModule } from "@orko/nestjs";
 
 @Module({
   imports: [
-    SynkroModule.forRoot({
+    OrkoModule.forRoot({
       transport: "in-memory",
     }),
   ],
@@ -29,7 +29,7 @@ export class AppModule {}
 For async configuration (e.g. using `ConfigService`):
 
 ```typescript
-SynkroModule.forRootAsync({
+OrkoModule.forRootAsync({
   imports: [ConfigModule],
   inject: [ConfigService],
   useFactory: (config: ConfigService) => ({
@@ -45,8 +45,8 @@ Use the `@OnEvent` decorator to register standalone event handlers:
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { OnEvent } from "@synkro/nestjs";
-import type { HandlerCtx } from "@synkro/core";
+import { OnEvent } from "@orko/nestjs";
+import type { HandlerCtx } from "@orko/core";
 
 @Injectable()
 export class NotificationHandler {
@@ -63,11 +63,11 @@ export class NotificationHandler {
 Define workflow structure in a config file:
 
 ```typescript
-import type { SynkroWorkflow } from "@synkro/core";
+import type { OrkoWorkflow } from "@orko/core";
 
 const noop = async () => {};
 
-export const workflows: SynkroWorkflow[] = [
+export const workflows: OrkoWorkflow[] = [
   {
     name: "ProcessOrder",
     onSuccess: "StartShipment",
@@ -91,8 +91,8 @@ Then bind handlers with `@OnWorkflowStep`:
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { OnWorkflowStep } from "@synkro/nestjs";
-import type { HandlerCtx } from "@synkro/core";
+import { OnWorkflowStep } from "@orko/nestjs";
+import type { HandlerCtx } from "@orko/core";
 
 @Injectable()
 export class OrderWorkflowHandler {
@@ -111,7 +111,7 @@ export class OrderWorkflowHandler {
 Pass the workflow config when registering the module:
 
 ```typescript
-SynkroModule.forRoot({
+OrkoModule.forRoot({
   transport: "in-memory",
   workflows,
 });
@@ -119,19 +119,19 @@ SynkroModule.forRoot({
 
 ### 4. Publish events
 
-Inject `SynkroService` to publish events or start workflows:
+Inject `OrkoService` to publish events or start workflows:
 
 ```typescript
 import { Controller, Post, Body } from "@nestjs/common";
-import { SynkroService } from "@synkro/nestjs";
+import { OrkoService } from "@orko/nestjs";
 
 @Controller("orders")
 export class OrderController {
-  constructor(private readonly synkro: SynkroService) {}
+  constructor(private readonly orko: OrkoService) {}
 
   @Post()
   async create(@Body() body: { productId: string }) {
-    await this.synkro.publish("ProcessOrder", body);
+    await this.orko.publish("ProcessOrder", body);
     return { status: "processing" };
   }
 }
@@ -139,14 +139,14 @@ export class OrderController {
 
 ## API
 
-### `SynkroModule`
+### `OrkoModule`
 
 | Method | Description |
 |---|---|
 | `forRoot(options)` | Register with static configuration |
 | `forRootAsync(options)` | Register with async configuration (useFactory) |
 
-### `SynkroService`
+### `OrkoService`
 
 | Method | Description |
 |---|---|

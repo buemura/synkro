@@ -1,11 +1,11 @@
-import { synkro } from "@/lib/synkro";
+import { orko } from "@/lib/orko";
 import { saveOrder } from "@/lib/orders";
 
 export async function POST(request: Request) {
   const body = await request.json();
   const { productId, quantity, amount } = body;
 
-  const requestId = await synkro.publish("ProcessOrder", {
+  const requestId = await orko.publish("ProcessOrder", {
     productId,
     quantity,
     amount,

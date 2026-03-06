@@ -8,9 +8,9 @@
     "start": "next start"
   },
   "dependencies": {
-    "@synkro/core": "workspace:*",
-    "@synkro/nextjs": "workspace:*",
-    "@synkro/ui": "workspace:*",
+    "@orko/core": "workspace:*",
+    "@orko/nextjs": "workspace:*",
+    "@orko/ui": "workspace:*",
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

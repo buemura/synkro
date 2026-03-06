@@ -1,4 +1,4 @@
-# Contributing to Synkro
+# Contributing to Orko
 
 Thanks for your interest in contributing! This guide will help you get set up and submit your first pull request.
 
@@ -7,13 +7,13 @@ Thanks for your interest in contributing! This guide will help you get set up an
 This is a monorepo managed with [pnpm workspaces](https://pnpm.io/workspaces):
 
 ```
-synkro/
+orko/
 ├── packages/
-│   ├── core/       → @synkro/core (core library)
-│   └── nestjs/     → @synkro/nestjs (NestJS integration)
+│   ├── core/       → @orko/core (core library)
+│   └── nestjs/     → @orko/nestjs (NestJS integration)
 ├── examples/
-│   ├── core/       → usage examples for @synkro/core
-│   └── nestjs/     → usage examples for @synkro/nestjs
+│   ├── core/       → usage examples for @orko/core
+│   └── nestjs/     → usage examples for @orko/nestjs
 ├── package.json            → root workspace config
 ├── pnpm-workspace.yaml     → workspace definition
 └── tsconfig.base.json      → shared TypeScript config
@@ -29,8 +29,8 @@ synkro/
 1. **Fork and clone the repository**
 
 ```bash
-git clone https://github.com/<your-username>/synkro.git
-cd synkro
+git clone https://github.com/<your-username>/orko.git
+cd orko
 ```
 
 2. **Install dependencies**
@@ -61,13 +61,13 @@ You can scope commands to a single package using pnpm's `--filter` flag:
 
 ```bash
 # Build only core
-pnpm --filter @synkro/core build
+pnpm --filter @orko/core build
 
 # Run tests only for nestjs
-pnpm --filter @synkro/nestjs test
+pnpm --filter @orko/nestjs test
 
 # Watch mode for core tests
-pnpm --filter @synkro/core test:watch
+pnpm --filter @orko/core test:watch
 ```
 
 ### Type checking

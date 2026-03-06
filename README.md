@@ -1,4 +1,4 @@
-# Synkro
+# Orko
 
 Lightweight event-driven workflow orchestrator for Node.js. Define standalone events and multi-step workflows with conditional branching, retries, and chaining — all via simple configuration.
 
@@ -19,21 +19,21 @@ Lightweight event-driven workflow orchestrator for Node.js. Define standalone ev
 
 | Package                             | Description                                           | Version |
 | ----------------------------------- | ----------------------------------------------------- | ------- |
-| [@synkro/core](./packages/core)     | Core orchestrator with Redis and in-memory transports | 0.8.0   |
-| [@synkro/ui](./packages/ui)         | Web dashboard for visualizing events and workflows    | 0.1.1   |
-| [@synkro/nestjs](./packages/nestjs) | NestJS integration module                             | 0.4.3   |
-| [@synkro/nextjs](./packages/nextjs) | Next.js integration                                   | 0.1.0   |
+| [@orko/core](./packages/core)     | Core orchestrator with Redis and in-memory transports | 0.8.0   |
+| [@orko/ui](./packages/ui)         | Web dashboard for visualizing events and workflows    | 0.1.1   |
+| [@orko/nestjs](./packages/nestjs) | NestJS integration module                             | 0.4.3   |
+| [@orko/nextjs](./packages/nextjs) | Next.js integration                                   | 0.1.0   |
 
 ## Quick Start
 
 ```bash
-npm install @synkro/core
+npm install @orko/core
 ```
 
 ```ts
-import { Synkro } from "@synkro/core";
+import { Orko } from "@orko/core";
 
-const synkro = await Synkro.start({
+const orko = await Orko.start({
   transport: "redis",
   connectionUrl: "redis://localhost:6379",
   events: [
@@ -70,26 +70,26 @@ const synkro = await Synkro.start({
   ],
 });
 
-await synkro.publish("UserSignedUp", { email: "user@example.com" });
-await synkro.publish("ProcessOrder", { orderId: "abc-123", amount: 49.99 });
+await orko.publish("UserSignedUp", { email: "user@example.com" });
+await orko.publish("ProcessOrder", { orderId: "abc-123", amount: 49.99 });
 ```
 
 ## Dashboard
 
-Install `@synkro/ui` and mount it on any HTTP endpoint to get a real-time dashboard.
+Install `@orko/ui` and mount it on any HTTP endpoint to get a real-time dashboard.
 
 ```bash
-npm install @synkro/ui
+npm install @orko/ui
 ```
 
 ```ts
 import express from "express";
-import { createDashboardHandler } from "@synkro/ui";
+import { createDashboardHandler } from "@orko/ui";
 
 const app = express();
-app.use("/synkro", createDashboardHandler(synkro, { basePath: "/synkro" }));
+app.use("/orko", createDashboardHandler(orko, { basePath: "/orko" }));
 app.listen(3000);
-// Dashboard at http://localhost:3000/synkro
+// Dashboard at http://localhost:3000/orko
 ```
 
 ### Event Metrics
@@ -106,10 +106,10 @@ Click any workflow to see a branching flow diagram with SVG connectors and a det
 
 ## Documentation
 
-- **[@synkro/core](./packages/core)** — Full API reference, workflow configuration, conditional routing, chaining, and retry
-- **[@synkro/ui](./packages/ui)** — Dashboard setup, served routes, and configuration options
-- **[@synkro/nestjs](./packages/nestjs)** — NestJS module registration and usage
-- **[@synkro/nextjs](./packages/nextjs)** — Next.js integration with route handlers and dashboard
+- **[@orko/core](./packages/core)** — Full API reference, workflow configuration, conditional routing, chaining, and retry
+- **[@orko/ui](./packages/ui)** — Dashboard setup, served routes, and configuration options
+- **[@orko/nestjs](./packages/nestjs)** — NestJS module registration and usage
+- **[@orko/nextjs](./packages/nextjs)** — Next.js integration with route handlers and dashboard
 - **[Examples](./examples)** — Working examples with Express, NestJS, and Next.js
 
 ## License

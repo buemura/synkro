@@ -1,4 +1,4 @@
-import { HandlerCtx } from "@synkro/core";
+import { HandlerCtx } from "@orko/core";
 
 import { updateOrderStatus } from "@/lib/orders";
 

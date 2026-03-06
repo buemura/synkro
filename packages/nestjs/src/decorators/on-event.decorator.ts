@@ -1,6 +1,6 @@
 import { SetMetadata } from "@nestjs/common";
-import type { RetryConfig } from "@synkro/core";
-import { ON_EVENT_METADATA } from "../synkro.constants.js";
+import type { RetryConfig } from "@orko/core";
+import { ON_EVENT_METADATA } from "../orko.constants.js";
 
 export interface OnEventMetadata {
   eventType: string;

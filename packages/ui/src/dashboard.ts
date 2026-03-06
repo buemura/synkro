@@ -4,7 +4,7 @@ export function getDashboardHtml(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Synkro Dashboard</title>
+  <title>Orko Dashboard</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -367,7 +367,7 @@ export function getDashboardHtml(): string {
     <header>
       <div class="logo">
         <div class="logo-icon">S</div>
-        <h1>Synkro <span>Dashboard</span></h1>
+        <h1>Orko <span>Dashboard</span></h1>
       </div>
       <button class="btn" id="header-action">Refresh</button>
     </header>
@@ -425,7 +425,7 @@ export function getDashboardHtml(): string {
       } catch (err) {
         document.getElementById('content').innerHTML =
           '<div class="empty-state"><p>Failed to load data. Check the console for errors.</p></div>';
-        console.error('Synkro Dashboard: Failed to fetch introspection data', err);
+        console.error('Orko Dashboard: Failed to fetch introspection data', err);
       }
     }
 
@@ -444,7 +444,7 @@ export function getDashboardHtml(): string {
       } catch (err) {
         document.getElementById('content').innerHTML =
           '<div class="empty-state"><p>Failed to load event data.</p></div>';
-        console.error('Synkro Dashboard: Failed to fetch event metrics', err);
+        console.error('Orko Dashboard: Failed to fetch event metrics', err);
       }
     }
 
@@ -467,7 +467,7 @@ export function getDashboardHtml(): string {
       } catch (err) {
         document.getElementById('content').innerHTML =
           '<div class="empty-state"><p>Failed to load workflow data.</p></div>';
-        console.error('Synkro Dashboard: Failed to fetch workflow data', err);
+        console.error('Orko Dashboard: Failed to fetch workflow data', err);
       }
     }
 

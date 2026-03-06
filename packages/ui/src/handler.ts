@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Synkro } from "@synkro/core";
+import type { Orko } from "@orko/core";
 
 import { getDashboardHtml } from "./dashboard.js";
 
@@ -8,7 +8,7 @@ export type DashboardOptions = {
 };
 
 export function createDashboardHandler(
-  synkro: Synkro,
+  orko: Orko,
   options?: DashboardOptions,
 ): (req: IncomingMessage, res: ServerResponse) => void {
   const basePath = normalizeBasePath(options?.basePath ?? "/");
@@ -30,7 +30,7 @@ export function createDashboardHandler(
     }
 
     if (path === "/api/introspection") {
-      const data = synkro.introspect();
+      const data = orko.introspect();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(data));
       return;
@@ -39,7 +39,7 @@ export function createDashboardHandler(
     const eventMetricsMatch = path.match(/^\/api\/events\/(.+)$/);
     if (eventMetricsMatch?.[1]) {
       const eventType = decodeURIComponent(eventMetricsMatch[1]);
-      synkro
+      orko
         .getEventMetrics(eventType)
         .then((data) => {
           res.writeHead(200, { "Content-Type": "application/json" });

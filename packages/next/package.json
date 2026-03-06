@@ -1,0 +1,51 @@
+{
+  "name": "@orko/nextjs",
+  "version": "0.1.0",
+  "description": "Next.js integration for @orko/core",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "workflow",
+    "state-machine",
+    "orchestrator",
+    "event-driven",
+    "nextjs",
+    "redis"
+  ],
+  "author": "buemura",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/buemura/orko.git"
+  },
+  "homepage": "https://github.com/buemura/orko/packages/next#readme",
+  "peerDependencies": {
+    "@orko/core": "^0.1.0",
+    "@orko/ui": "^0.1.0",
+    "next": "^14.0.0 || ^15.0.0 || ^16.0.0"
+  },
+  "devDependencies": {
+    "@orko/core": "workspace:*",
+    "@orko/ui": "workspace:*",
+    "next": "^16.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  }
+}

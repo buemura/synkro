@@ -1,5 +1,5 @@
 import { SetMetadata } from "@nestjs/common";
-import { ON_WORKFLOW_STEP_METADATA } from "../synkro.constants.js";
+import { ON_WORKFLOW_STEP_METADATA } from "../orko.constants.js";
 
 export interface OnWorkflowStepMetadata {
   workflowName: string;

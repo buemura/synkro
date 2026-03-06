@@ -1,4 +1,4 @@
-import { OnEvent, type HandlerCtx } from "@synkro/core";
+import { OnEvent, type HandlerCtx } from "@orko/core";
 
 export class OrderEventHandler {
   @OnEvent("OrderCreated", { maxRetries: 3 })

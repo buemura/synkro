@@ -10,10 +10,10 @@ importers:
 
   examples/core:
     dependencies:
-      '@synkro/core':
+      '@orko/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@synkro/ui':
+      '@orko/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       dotenv:
@@ -44,13 +44,13 @@ importers:
       '@nestjs/platform-express':
         specifier: ^11.0.0
         version: 11.1.16(@nestjs/common@11.1.16(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.16)
-      '@synkro/core':
+      '@orko/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@synkro/nestjs':
+      '@orko/nestjs':
         specifier: workspace:*
         version: link:../../packages/nestjs
-      '@synkro/ui':
+      '@orko/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       reflect-metadata:
@@ -72,13 +72,13 @@ importers:
 
   examples/nextjs:
     dependencies:
-      '@synkro/core':
+      '@orko/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@synkro/nextjs':
+      '@orko/nextjs':
         specifier: workspace:*
-        version: link:../../packages/nextjs
-      '@synkro/ui':
+        version: link:../../packages/next
+      '@orko/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       next:
@@ -131,12 +131,12 @@ importers:
       '@nestjs/testing':
         specifier: ^11.1.15
         version: 11.1.16(@nestjs/common@11.1.16(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.16)(@nestjs/platform-express@11.1.16)
+      '@orko/core':
+        specifier: workspace:*
+        version: link:../core
       '@swc/core':
         specifier: ^1.15.18
         version: 1.15.18
-      '@synkro/core':
-        specifier: workspace:*
-        version: link:../core
       ioredis:
         specifier: ^5.10.0
         version: 5.10.0
@@ -156,12 +156,12 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.3.3)(tsx@4.21.0)
 
-  packages/nextjs:
+  packages/next:
     devDependencies:
-      '@synkro/core':
+      '@orko/core':
         specifier: workspace:*
         version: link:../core
-      '@synkro/ui':
+      '@orko/ui':
         specifier: workspace:*
         version: link:../ui
       next:
@@ -176,7 +176,7 @@ importers:
 
   packages/ui:
     devDependencies:
-      '@synkro/core':
+      '@orko/core':
         specifier: workspace:*
         version: link:../core
       '@types/node':

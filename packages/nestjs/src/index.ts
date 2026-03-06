@@ -1,14 +1,14 @@
-export { SynkroModule } from "./synkro.module.js";
-export { SynkroService } from "./synkro.service.js";
-export { SynkroExplorer } from "./synkro.explorer.js";
+export { OrkoModule } from "./orko.module.js";
+export { OrkoService } from "./orko.service.js";
+export { OrkoExplorer } from "./orko.explorer.js";
 export { OnEvent, OnWorkflowStep } from "./decorators/index.js";
 export type {
   OnEventMetadata,
   OnWorkflowStepMetadata,
 } from "./decorators/index.js";
 export type {
-  SynkroModuleOptions,
-  SynkroModuleAsyncOptions,
-  NestSynkroWorkflow,
-  NestSynkroWorkflowStep,
-} from "./synkro.interfaces.js";
+  OrkoModuleOptions,
+  OrkoModuleAsyncOptions,
+  NestOrkoWorkflow,
+  NestOrkoWorkflowStep,
+} from "./orko.interfaces.js";
