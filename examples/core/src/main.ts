@@ -23,7 +23,7 @@ const events: SynkroEvent[] = [
         sku: string;
         remaining: number;
       };
-      await delay(1000);
+      await delay(500);
       console.log(
         `  [Inventory] (${ctx.requestId}) SKU ${sku} is low (${remaining} left), reordering...`,
       );
@@ -36,7 +36,7 @@ const events: SynkroEvent[] = [
         action: string;
         userId: string;
       };
-      await delay(1000);
+      await delay(500);
       console.log(
         `  [Audit] (${ctx.requestId}) User ${userId} performed "${action}"`,
       );
@@ -72,7 +72,7 @@ const workflows: SynkroWorkflow[] = [
         type: "CreateAccount",
         handler: async (ctx: HandlerCtx) => {
           const { email } = ctx.payload as { email: string };
-          await delay(1000);
+          await delay(500);
           console.log(
             `  [Onboarding] (${ctx.requestId}) Creating account for ${email}`,
           );
@@ -82,7 +82,7 @@ const workflows: SynkroWorkflow[] = [
       {
         type: "SetupPreferences",
         handler: async (ctx: HandlerCtx) => {
-          await delay(1000);
+          await delay(500);
           console.log(
             `  [Onboarding] (${ctx.requestId}) Setting default preferences`,
           );
@@ -92,7 +92,7 @@ const workflows: SynkroWorkflow[] = [
         type: "SendOnboardingEmail",
         handler: async (ctx: HandlerCtx) => {
           const { email } = ctx.payload as { email: string };
-          await delay(1000);
+          await delay(500);
           console.log(
             `  [Onboarding] (${ctx.requestId}) Sending onboarding guide to ${email}`,
           );
@@ -162,11 +162,16 @@ async function main() {
       new DeploymentWorkflowHandlers(),
       new DataPipelineHandlers(),
     ],
+    retention: {
+      dedupTtl: 60, // dedup keys expire after 1 min (demo)
+      stateTtl: 60, // workflow state kept for 1 min (demo)
+      metricsTtl: 60, // metrics keys expire after 1 min (demo)
+    },
   });
 
   // Standalone event for the onboarding completion chain
   synkro.on("OnboardingComplete", async (ctx) => {
-    await delay(1000);
+    await delay(500);
     console.log(`  [Complete] (${ctx.requestId}) Onboarding finished`);
   });
 

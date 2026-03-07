@@ -30,6 +30,13 @@ export type SynkroWorkflow = {
   onFailure?: string;
 };
 
+export type RetentionConfig = {
+  lockTtl?: number;
+  dedupTtl?: number;
+  stateTtl?: number;
+  metricsTtl?: number;
+};
+
 export type SynkroOptions = {
   transport?: "redis" | "in-memory";
   connectionUrl?: string;
@@ -37,6 +44,7 @@ export type SynkroOptions = {
   events?: SynkroEvent[];
   workflows?: SynkroWorkflow[];
   handlers?: object[];
+  retention?: RetentionConfig;
 };
 
 export type PublishFunction = (

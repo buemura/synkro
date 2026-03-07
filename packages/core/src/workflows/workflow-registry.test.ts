@@ -1236,4 +1236,95 @@ describe("WorkflowRegistry", () => {
       expect(mockRedis.publishMessage).not.toHaveBeenCalled();
     });
   });
+
+  describe("retention config", () => {
+    it("should use custom stateTtl for workflow state", async () => {
+      const customRedis = createMockRedis();
+      const customHandlerRegistry = createMockHandlerRegistry();
+      const customRegistry = new WorkflowRegistry(customRedis, customHandlerRegistry, { stateTtl: 600 });
+
+      const workflow = createTestWorkflow();
+      customRegistry.registerWorkflows([workflow]);
+
+      await customRegistry.startWorkflow("order-processing", "req-ttl", { orderId: 1 });
+
+      expect(customRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-ttl:order-processing",
+        JSON.stringify({
+          workflowName: "order-processing",
+          currentStep: 0,
+          status: "running",
+        }),
+        600,
+      );
+    });
+
+    it("should use custom lockTtl for distributed lock", async () => {
+      const customRedis = createMockRedis();
+      const customHandlerRegistry = createMockHandlerRegistry();
+      const customRegistry = new WorkflowRegistry(customRedis, customHandlerRegistry, { lockTtl: 30 });
+
+      const workflow = createTestWorkflow();
+      customRegistry.registerWorkflows([workflow]);
+
+      vi.mocked(customRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "order-processing",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(customRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:order-processing:validate:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-lock", payload: {} }),
+      );
+      await flushPromises();
+
+      expect(customRedis.setCacheIfNotExists).toHaveBeenCalledWith(
+        expect.stringContaining("synkro:lock:workflow:"),
+        "1",
+        30,
+      );
+    });
+
+    it("should use custom dedupTtl for deduplication key", async () => {
+      const customRedis = createMockRedis();
+      const customHandlerRegistry = createMockHandlerRegistry();
+      const customRegistry = new WorkflowRegistry(customRedis, customHandlerRegistry, { dedupTtl: 1800 });
+
+      const workflow = createTestWorkflow();
+      customRegistry.registerWorkflows([workflow]);
+
+      vi.mocked(customRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "order-processing",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(customRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:order-processing:validate:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-dedup", payload: {} }),
+      );
+      await flushPromises();
+
+      expect(customRedis.setCache).toHaveBeenCalledWith(
+        expect.stringContaining("synkro:dedupe:workflow:"),
+        "1",
+        1800,
+      );
+    });
+  });
 });

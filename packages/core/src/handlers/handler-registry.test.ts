@@ -536,4 +536,88 @@ describe("HandlerRegistry", () => {
       expect(mockRedis.publishMessage).not.toHaveBeenCalled();
     });
   });
+
+  describe("retention config", () => {
+    it("should use custom lockTtl for distributed lock", async () => {
+      const customRedis = createMockRedis();
+      const customRegistry = new HandlerRegistry(customRedis, { lockTtl: 60 });
+      customRegistry.setPublishFn(vi.fn().mockResolvedValue("id"));
+
+      const handler = vi.fn();
+      customRegistry.register("test:event", handler);
+
+      const subscribeCall = vi.mocked(customRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-ttl", payload: {} }));
+      await flushPromises();
+
+      expect(customRedis.setCacheIfNotExists).toHaveBeenCalledWith(
+        "synkro:lock:handler:req-ttl:test:event",
+        "1",
+        60,
+      );
+    });
+
+    it("should use custom dedupTtl for deduplication key", async () => {
+      const customRedis = createMockRedis();
+      const customRegistry = new HandlerRegistry(customRedis, { dedupTtl: 3600 });
+      customRegistry.setPublishFn(vi.fn().mockResolvedValue("id"));
+
+      const handler = vi.fn();
+      customRegistry.register("test:event", handler);
+
+      const subscribeCall = vi.mocked(customRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-dedup", payload: {} }));
+      await flushPromises();
+
+      expect(customRedis.setCache).toHaveBeenCalledWith(
+        "synkro:dedupe:handler:req-dedup:test:event",
+        "1",
+        3600,
+      );
+    });
+
+    it("should pass metricsTtl to incrementCache", async () => {
+      const customRedis = createMockRedis();
+      const customRegistry = new HandlerRegistry(customRedis, { metricsTtl: 7200 });
+      customRegistry.setPublishFn(vi.fn().mockResolvedValue("id"));
+
+      const handler = vi.fn();
+      customRegistry.register("test:event", handler);
+
+      const subscribeCall = vi.mocked(customRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-metrics", payload: {} }));
+      await flushPromises();
+
+      expect(customRedis.incrementCache).toHaveBeenCalledWith(
+        "synkro:metrics:test:event:received",
+        7200,
+      );
+      expect(customRedis.incrementCache).toHaveBeenCalledWith(
+        "synkro:metrics:test:event:completed",
+        7200,
+      );
+    });
+
+    it("should pass undefined metricsTtl when not configured", async () => {
+      const handler = vi.fn();
+      registry.register("test:event", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-no-ttl", payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.incrementCache).toHaveBeenCalledWith(
+        "synkro:metrics:test:event:received",
+        undefined,
+      );
+    });
+  });
 });

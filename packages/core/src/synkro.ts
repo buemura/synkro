@@ -12,6 +12,7 @@ import { WorkflowRegistry } from "./workflows/index.js";
 import type {
   EventMetrics,
   HandlerFunction,
+  RetentionConfig,
   RetryConfig,
   SynkroIntrospection,
   SynkroOptions,
@@ -24,10 +25,10 @@ export class Synkro {
   private handlerRegistry: HandlerRegistry;
   private workflowRegistry: WorkflowRegistry;
 
-  private constructor(transport: TransportManager) {
+  private constructor(transport: TransportManager, retention?: RetentionConfig) {
     this.transport = transport;
-    this.handlerRegistry = new HandlerRegistry(transport);
-    this.workflowRegistry = new WorkflowRegistry(transport, this.handlerRegistry);
+    this.handlerRegistry = new HandlerRegistry(transport, retention);
+    this.workflowRegistry = new WorkflowRegistry(transport, this.handlerRegistry, retention);
     this.handlerRegistry.setPublishFn(this.publish.bind(this));
   }
 
@@ -48,7 +49,7 @@ export class Synkro {
       );
     }
 
-    const instance = new Synkro(transport);
+    const instance = new Synkro(transport, options.retention);
 
     // Patch decorated workflow step handlers before registering workflows
     const workflows = options.workflows

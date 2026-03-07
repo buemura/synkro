@@ -116,8 +116,12 @@ export class RedisManager implements TransportManager {
     await this.cacheClient.del(key);
   }
 
-  async incrementCache(key: string): Promise<number> {
-    return await this.cacheClient.incr(key);
+  async incrementCache(key: string, ttlSeconds?: number): Promise<number> {
+    const value = await this.cacheClient.incr(key);
+    if (ttlSeconds) {
+      await this.cacheClient.expire(key, ttlSeconds);
+    }
+    return value;
   }
 
   async disconnect(): Promise<void> {

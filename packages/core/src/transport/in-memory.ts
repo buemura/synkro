@@ -63,14 +63,18 @@ export class InMemoryManager implements TransportManager {
     this.cacheExpiry.delete(key);
   }
 
-  async incrementCache(key: string): Promise<number> {
+  async incrementCache(key: string, ttlSeconds?: number): Promise<number> {
     this.evictIfExpired(key);
-    const expiresAt = this.cacheExpiry.get(key);
     const current = Number(this.cache.get(key) ?? 0);
     const next = current + 1;
     this.cache.set(key, String(next));
-    if (expiresAt !== undefined) {
-      this.cacheExpiry.set(key, expiresAt);
+    if (ttlSeconds) {
+      this.applyTtl(key, ttlSeconds);
+    } else {
+      const expiresAt = this.cacheExpiry.get(key);
+      if (expiresAt !== undefined) {
+        this.cacheExpiry.set(key, expiresAt);
+      }
     }
     return next;
   }

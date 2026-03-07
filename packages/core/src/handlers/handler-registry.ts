@@ -7,6 +7,7 @@ import type {
   HandlerCtx,
   HandlerFunction,
   PublishFunction,
+  RetentionConfig,
   RetryBackoffStrategy,
   RetryConfig,
 } from "../types.js";
@@ -45,8 +46,8 @@ function serializeError(err: unknown): { message: string; name?: string } {
   return { message: String(err) };
 }
 
-const PROCESSING_LOCK_TTL_SECONDS = 300;
-const DEDUPE_TTL_SECONDS = 86400;
+const DEFAULT_LOCK_TTL = 300;
+const DEFAULT_DEDUPE_TTL = 86400;
 
 export class HandlerRegistry {
   private handlers = new Map<string, Set<HandlerEntry>>();
@@ -54,8 +55,18 @@ export class HandlerRegistry {
   private subscribedChannels = new Set<string>();
 
   private publishFn: PublishFunction | null = null;
+  private readonly lockTtl: number;
+  private readonly dedupTtl: number;
+  private readonly metricsTtl: number | undefined;
 
-  constructor(private redis: TransportManager) {}
+  constructor(
+    private redis: TransportManager,
+    retention?: RetentionConfig,
+  ) {
+    this.lockTtl = retention?.lockTtl ?? DEFAULT_LOCK_TTL;
+    this.dedupTtl = retention?.dedupTtl ?? DEFAULT_DEDUPE_TTL;
+    this.metricsTtl = retention?.metricsTtl;
+  }
 
   setPublishFn(fn: PublishFunction): void {
     this.publishFn = fn;
@@ -163,7 +174,7 @@ export class HandlerRegistry {
       distributedLockAcquired = await this.redis.setCacheIfNotExists(
         distributedLockKey,
         "1",
-        PROCESSING_LOCK_TTL_SECONDS,
+        this.lockTtl,
       );
 
       if (!distributedLockAcquired) {
@@ -178,7 +189,7 @@ export class HandlerRegistry {
       );
 
       if (trackMetrics) {
-        await this.redis.incrementCache(`synkro:metrics:${eventType}:received`);
+        await this.redis.incrementCache(`synkro:metrics:${eventType}:received`, this.metricsTtl);
       }
 
       const results = await Promise.allSettled(
@@ -191,9 +202,9 @@ export class HandlerRegistry {
 
       if (trackMetrics) {
         if (allSucceeded) {
-          await this.redis.incrementCache(`synkro:metrics:${eventType}:completed`);
+          await this.redis.incrementCache(`synkro:metrics:${eventType}:completed`, this.metricsTtl);
         } else {
-          await this.redis.incrementCache(`synkro:metrics:${eventType}:failed`);
+          await this.redis.incrementCache(`synkro:metrics:${eventType}:failed`, this.metricsTtl);
         }
       }
 
@@ -213,7 +224,7 @@ export class HandlerRegistry {
         JSON.stringify(eventPayload),
       );
 
-      await this.redis.setCache(dedupeKey, "1", DEDUPE_TTL_SECONDS);
+      await this.redis.setCache(dedupeKey, "1", this.dedupTtl);
     } finally {
       this.processingLocks.delete(localLockKey);
       if (distributedLockAcquired) {

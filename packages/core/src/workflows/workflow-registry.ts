@@ -2,7 +2,7 @@ import { logger } from "../logger.js";
 
 import type { HandlerRegistry } from "../handlers/handler-registry.js";
 import type { TransportManager } from "../transport/transport.js";
-import type { HandlerFunction, SynkroWorkflow, WorkflowInfo } from "../types.js";
+import type { HandlerFunction, RetentionConfig, SynkroWorkflow, WorkflowInfo } from "../types.js";
 
 type WorkflowState = {
   workflowName: string;
@@ -10,19 +10,28 @@ type WorkflowState = {
   status: "running" | "completed" | "failed";
 };
 
-const PROCESSING_LOCK_TTL_SECONDS = 300;
-const DEDUPE_TTL_SECONDS = 86400;
+const DEFAULT_LOCK_TTL = 300;
+const DEFAULT_DEDUPE_TTL = 86400;
+const DEFAULT_STATE_TTL = 86400;
 
 export class WorkflowRegistry {
   private workflows = new Map<string, SynkroWorkflow>();
   private branchTargets = new Map<string, Set<string>>();
   private processingLocks = new Set<string>();
   private lockQueues = new Map<string, Promise<void>>();
+  private readonly lockTtl: number;
+  private readonly dedupTtl: number;
+  private readonly stateTtl: number;
 
   constructor(
     private redis: TransportManager,
     private handlerRegistry: HandlerRegistry,
-  ) {}
+    retention?: RetentionConfig,
+  ) {
+    this.lockTtl = retention?.lockTtl ?? DEFAULT_LOCK_TTL;
+    this.dedupTtl = retention?.dedupTtl ?? DEFAULT_DEDUPE_TTL;
+    this.stateTtl = retention?.stateTtl ?? DEFAULT_STATE_TTL;
+  }
 
   private async withLock(
     lockKey: string,
@@ -416,7 +425,7 @@ export class WorkflowRegistry {
       distributedLockAcquired = await this.redis.setCacheIfNotExists(
         distributedLockKey,
         "1",
-        PROCESSING_LOCK_TTL_SECONDS,
+        this.lockTtl,
       );
 
       if (!distributedLockAcquired) {
@@ -428,7 +437,7 @@ export class WorkflowRegistry {
     } finally {
       this.processingLocks.delete(lockKey);
       if (completed) {
-        await this.redis.setCache(dedupeKey, "1", DEDUPE_TTL_SECONDS);
+        await this.redis.setCache(dedupeKey, "1", this.dedupTtl);
       }
       if (distributedLockAcquired) {
         await this.redis.deleteCache(distributedLockKey);
@@ -472,7 +481,7 @@ export class WorkflowRegistry {
     await this.redis.setCache(
       this.stateKey(requestId, state.workflowName),
       JSON.stringify(state),
-      86400,
+      this.stateTtl,
     );
   }
 

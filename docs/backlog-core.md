@@ -38,9 +38,8 @@ Added warning logs when `processingLocks` exceeds 1000 entries in both `HandlerR
 **File:** `packages/core/src/logger.ts:1`
 `debugEnabled` is a module-level mutable boolean. If multiple `Synkro` instances are created with different `debug` settings, the last one wins globally. Logger should be scoped per instance.
 
-### TD-07: Hardcoded workflow state TTL
-**File:** `packages/core/src/workflows/workflow-registry.ts:378`
-Workflow state TTL is hardcoded to `86400` seconds (24h). Long-running workflows may lose state. Should be configurable per workflow.
+### ~~TD-07: Hardcoded workflow state TTL~~ ✅ Resolved in v0.13.0
+Workflow state TTL is now configurable via `retention.stateTtl` in `SynkroOptions`. Subsumed by IMP-08.
 
 ### FT-01: Dead letter queue for failed events
 **Starting points:** `packages/core/src/handlers/handler-registry.ts`, `packages/core/src/workflows/workflow-registry.ts`
@@ -87,9 +86,8 @@ Removed the unused `eventToWorkflows` map declaration and population code from `
 ### IMP-05: Structured logging
 Logger only supports `console.log`/`warn`/`error` with unstructured args. Should support structured JSON output with fields like `requestId`, `eventType`, `workflowName` for production observability.
 
-### IMP-08: Configurable key retention / TTL policy
-**Files:** `packages/core/src/handlers/handler-registry.ts`, `packages/core/src/workflows/workflow-registry.ts`, `packages/core/src/types.ts`
-Every workflow run and event execution creates Redis keys (dedup, state, metrics) that accumulate over time. Metrics keys (`synkro:metrics:*`) have no TTL at all. Dedup keys (`synkro:dedupe:*`) and workflow state keys (`workflow:state:*`) use hardcoded 24h TTLs. For high-throughput systems this leads to significant Redis memory/disk growth. Should expose a `retention` config in `SynkroOptions` allowing users to set default TTLs per key category (e.g., `dedupTtl`, `stateTtl`, `metricsTtl`) or disable persistence for categories they don't need. Consider also a global `defaultTtl` fallback. This subsumes the workflow state TTL concern in TD-07.
+### ~~IMP-08: Configurable key retention / TTL policy~~ ✅ Resolved in v0.13.0
+`SynkroOptions` now accepts a `retention` config with per-category TTLs: `lockTtl`, `dedupTtl`, `stateTtl`, and `metricsTtl`. All fields are optional with sensible defaults. Metrics keys now support TTL via an extended `incrementCache` transport method. Also resolves TD-07.
 
 ### IMP-09: Test coverage for transports
 No dedicated test file for `in-memory.ts`. Most behavior tests use Redis mocks; in-memory transport parity is not verified. Should add shared transport contract tests executed against both implementations, covering TTL behavior, concurrent subscriptions, and edge cases.

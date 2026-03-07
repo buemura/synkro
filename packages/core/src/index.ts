@@ -7,6 +7,7 @@ export type {
   HandlerCtx,
   HandlerFunction,
   PublishFunction,
+  RetentionConfig,
   RetryBackoffStrategy,
   RetryConfig,
   SynkroEvent,
