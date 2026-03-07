@@ -50,6 +50,96 @@ describe("WorkflowRegistry", () => {
     registry = new WorkflowRegistry(mockRedis, mockHandlerRegistry);
   });
 
+  describe("workflow validation", () => {
+    it("should reject a workflow with empty name", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          { name: "", steps: [{ type: "step1", handler: vi.fn() }] },
+        ]),
+      ).toThrow("Workflow name must not be empty");
+    });
+
+    it("should reject a workflow with no steps", () => {
+      expect(() =>
+        registry.registerWorkflows([{ name: "empty-workflow", steps: [] }]),
+      ).toThrow('Workflow "empty-workflow" must have at least one step');
+    });
+
+    it("should reject a workflow with duplicate step types", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "dup-workflow",
+            steps: [
+              { type: "step1", handler: vi.fn() },
+              { type: "step1", handler: vi.fn() },
+            ],
+          },
+        ]),
+      ).toThrow(
+        'Workflow "dup-workflow" has duplicate step type "step1"',
+      );
+    });
+
+    it("should reject a workflow with dangling onSuccess target", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "dangling-workflow",
+            steps: [
+              {
+                type: "step1",
+                handler: vi.fn(),
+                onSuccess: "nonexistent",
+              },
+            ],
+          },
+        ]),
+      ).toThrow(
+        'step "step1" has onSuccess target "nonexistent" that does not match any step',
+      );
+    });
+
+    it("should reject a workflow with dangling onFailure target", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "dangling-workflow",
+            steps: [
+              {
+                type: "step1",
+                handler: vi.fn(),
+                onFailure: "nonexistent",
+              },
+            ],
+          },
+        ]),
+      ).toThrow(
+        'step "step1" has onFailure target "nonexistent" that does not match any step',
+      );
+    });
+
+    it("should accept a valid workflow with onSuccess/onFailure targets", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "valid-workflow",
+            steps: [
+              {
+                type: "step1",
+                handler: vi.fn(),
+                onSuccess: "step2",
+                onFailure: "step3",
+              },
+              { type: "step2", handler: vi.fn() },
+              { type: "step3", handler: vi.fn() },
+            ],
+          },
+        ]),
+      ).not.toThrow();
+    });
+  });
+
   describe("registerWorkflows", () => {
     it("should register each step handler via HandlerRegistry", () => {
       const workflow = createTestWorkflow();

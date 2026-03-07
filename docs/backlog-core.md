@@ -6,9 +6,8 @@ Items are organized by priority (P0 > P1 > P2 > P3). Security-sensitive items ar
 
 ## P0 - Critical
 
-### TD-11: Validate workflow definitions at registration
-**File:** `packages/core/src/workflows/workflow-registry.ts`
-Workflows are accepted without structural validation (empty `steps`, duplicate step types, dangling `onSuccess`/`onFailure` targets). Non-null assertion on `workflow.steps[0]!` can crash at runtime. Should add a workflow validator that throws clear errors before subscription/registration.
+### ~~TD-11: Validate workflow definitions at registration~~ ✅ Resolved
+`registerWorkflows` now validates each workflow before registration: rejects empty name, empty steps, duplicate step types, and dangling `onSuccess`/`onFailure` targets with clear error messages.
 
 ### TD-13: Harden message parsing paths `[SEC]`
 **File:** `packages/core/src/handlers/handler-registry.ts`, `packages/core/src/workflows/workflow-registry.ts`

@@ -66,6 +66,7 @@ export class WorkflowRegistry {
 
   registerWorkflows(workflows: SynkroWorkflow[]): void {
     for (const workflow of workflows) {
+      this.validateWorkflow(workflow);
       this.workflows.set(workflow.name, workflow);
 
       const targets = new Set<string>();
@@ -352,6 +353,41 @@ export class WorkflowRegistry {
 
   private stepChannel(workflowName: string, stepType: string): string {
     return `workflow:${workflowName}:${stepType}`;
+  }
+
+  private validateWorkflow(workflow: SynkroWorkflow): void {
+    if (!workflow.name) {
+      throw new Error("[WorkflowRegistry] - Workflow name must not be empty");
+    }
+
+    if (!workflow.steps || workflow.steps.length === 0) {
+      throw new Error(
+        `[WorkflowRegistry] - Workflow "${workflow.name}" must have at least one step`,
+      );
+    }
+
+    const stepTypes = new Set<string>();
+    for (const step of workflow.steps) {
+      if (stepTypes.has(step.type)) {
+        throw new Error(
+          `[WorkflowRegistry] - Workflow "${workflow.name}" has duplicate step type "${step.type}"`,
+        );
+      }
+      stepTypes.add(step.type);
+    }
+
+    for (const step of workflow.steps) {
+      if (step.onSuccess && !stepTypes.has(step.onSuccess)) {
+        throw new Error(
+          `[WorkflowRegistry] - Workflow "${workflow.name}" step "${step.type}" has onSuccess target "${step.onSuccess}" that does not match any step`,
+        );
+      }
+      if (step.onFailure && !stepTypes.has(step.onFailure)) {
+        throw new Error(
+          `[WorkflowRegistry] - Workflow "${workflow.name}" step "${step.type}" has onFailure target "${step.onFailure}" that does not match any step`,
+        );
+      }
+    }
   }
 
   private stateKey(requestId: string, workflowName: string): string {
