@@ -1,4 +1,4 @@
-import { logger } from "../logger.js";
+import { Logger } from "../logger.js";
 
 import type { TransportManager } from "../transport/transport.js";
 import type {
@@ -10,11 +10,13 @@ import type {
   RetentionConfig,
   RetryBackoffStrategy,
   RetryConfig,
+  SchemaValidator,
 } from "../types.js";
 
 type HandlerEntry = {
   handler: HandlerFunction;
   retry?: RetryConfig;
+  schema?: SchemaValidator;
 };
 
 const DEFAULT_RETRY_DELAY_MS = 1000;
@@ -53,6 +55,7 @@ export class HandlerRegistry {
   private handlers = new Map<string, Set<HandlerEntry>>();
   private processingLocks = new Set<string>();
   private subscribedChannels = new Set<string>();
+  private schemas = new Map<string, SchemaValidator>();
 
   private publishFn: PublishFunction | null = null;
   private readonly lockTtl: number;
@@ -62,14 +65,27 @@ export class HandlerRegistry {
   constructor(
     private redis: TransportManager,
     retention?: RetentionConfig,
+    private readonly logger: Logger = new Logger(),
   ) {
     this.lockTtl = retention?.lockTtl ?? DEFAULT_LOCK_TTL;
     this.dedupTtl = retention?.dedupTtl ?? DEFAULT_DEDUPE_TTL;
     this.metricsTtl = retention?.metricsTtl;
   }
 
+  get activeCount(): number {
+    return this.processingLocks.size;
+  }
+
   setPublishFn(fn: PublishFunction): void {
     this.publishFn = fn;
+  }
+
+  registerSchema(eventType: string, schema: SchemaValidator): void {
+    this.schemas.set(eventType, schema);
+  }
+
+  getSchema(eventType: string): SchemaValidator | undefined {
+    return this.schemas.get(eventType);
   }
 
   async getEventMetrics(eventType: string): Promise<EventMetrics> {
@@ -101,6 +117,7 @@ export class HandlerRegistry {
     eventType: string,
     handlerFn: HandlerFunction,
     retry?: RetryConfig,
+    schema?: SchemaValidator,
   ): void {
     if (!this.handlers.has(eventType)) {
       this.handlers.set(eventType, new Set());
@@ -108,6 +125,7 @@ export class HandlerRegistry {
     this.handlers.get(eventType)!.add({
       handler: handlerFn,
       ...(retry && { retry }),
+      ...(schema && { schema }),
     });
 
     if (!this.subscribedChannels.has(eventType)) {
@@ -131,17 +149,29 @@ export class HandlerRegistry {
     try {
       event = JSON.parse(message) as { requestId: string; payload: unknown };
     } catch {
-      logger.error(
+      this.logger.error(
         `[HandlerRegistry] - Malformed message on "${eventType}", dropping: ${message}`,
       );
       return;
     }
 
     if (!event.requestId || typeof event.requestId !== "string") {
-      logger.error(
+      this.logger.error(
         `[HandlerRegistry] - Missing or invalid requestId on "${eventType}", dropping message`,
       );
       return;
+    }
+
+    const globalSchema = this.schemas.get(eventType);
+    if (globalSchema) {
+      try {
+        globalSchema(event.payload);
+      } catch (err) {
+        this.logger.error(
+          `[HandlerRegistry] - Schema validation failed for "${eventType}" (requestId: ${event.requestId}): ${err}`,
+        );
+        return;
+      }
     }
 
     const localLockKey = `${event.requestId}:${eventType}`;
@@ -152,7 +182,7 @@ export class HandlerRegistry {
     const dedupeKey = this.dedupeKey(localLockKey);
     const alreadyProcessed = await this.redis.getCache(dedupeKey);
     if (alreadyProcessed === "1") {
-      logger.debug(
+      this.logger.debug(
         `[HandlerRegistry] duplicate message ignored for "${eventType}" (requestId: ${event.requestId})`,
       );
       return;
@@ -160,7 +190,7 @@ export class HandlerRegistry {
 
     this.processingLocks.add(localLockKey);
     if (this.processingLocks.size > 1000) {
-      logger.warn(
+      this.logger.warn(
         `[HandlerRegistry] - processingLocks size exceeded 1000 (current: ${this.processingLocks.size})`,
       );
     }
@@ -178,13 +208,13 @@ export class HandlerRegistry {
       );
 
       if (!distributedLockAcquired) {
-        logger.debug(
+        this.logger.debug(
           `[HandlerRegistry] in-flight message ignored for "${eventType}" (requestId: ${event.requestId})`,
         );
         return;
       }
 
-      logger.debug(
+      this.logger.debug(
         `[HandlerRegistry] handleMessage("${eventType}") entries=${entries.size}`,
       );
 
@@ -260,6 +290,10 @@ export class HandlerRegistry {
       },
     };
 
+    if (entry.schema) {
+      entry.schema(event.payload);
+    }
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         await entry.handler(ctx);
@@ -276,12 +310,12 @@ export class HandlerRegistry {
             entry.retry?.delayMs,
             entry.retry?.jitter,
           );
-          logger.warn(
+          this.logger.warn(
             `[HandlerRegistry] - Handler "${eventType}" failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`,
           );
           await sleep(delay);
         } else {
-          logger.error(
+          this.logger.error(
             `[HandlerRegistry] - Handler "${eventType}" failed after ${attempt + 1} attempt(s): ${error}`,
           );
           throw error;

@@ -10,6 +10,9 @@ Lightweight workflow and state machine orchestrator. Define event-driven workflo
 - **Workflow Chaining** — Trigger follow-up workflows on completion, success, or failure
 - **Retry Support** — Configurable retry logic per step
 - **Transport Options** — Redis for production or in-memory for simple projects and local development
+- **Schema Validation** — Optional payload validation at publish and handler dispatch time
+- **Workflow Timeout** — Configurable timeouts per step or per workflow
+- **Graceful Shutdown** — Drains active handlers before disconnecting
 - **Simple API** — Single `Synkro` class with minimal configuration
 - **TypeScript** — Full type support out of the box
 
@@ -231,6 +234,10 @@ type SynkroOptions = {
   debug?: boolean;
   events?: SynkroEvent[];
   workflows?: SynkroWorkflow[];
+  handlers?: object[];
+  retention?: RetentionConfig;
+  schemas?: Record<string, SchemaValidator>; // global payload validators per event type
+  drainTimeout?: number; // ms to wait for in-flight handlers on stop() (default: 5000)
 };
 ```
 
@@ -281,7 +288,7 @@ synkro.on("ValidateStock", async (ctx) => {
 
 ### `synkro.stop(): Promise<void>`
 
-Disconnects the transport and cleans up resources.
+Gracefully shuts down. Waits for in-flight handlers to complete (up to `drainTimeout`), then disconnects the transport.
 
 ## Types
 
@@ -294,10 +301,13 @@ type RetryConfig = {
   retryable?: (error: unknown) => boolean; // skip retries for non-retryable errors
 };
 
+type SchemaValidator = (payload: unknown) => void; // throws on invalid
+
 type SynkroEvent = {
   type: string;
   handler: HandlerFunction;
   retry?: RetryConfig;
+  schema?: SchemaValidator;
 };
 
 type SynkroWorkflow = {
@@ -306,6 +316,7 @@ type SynkroWorkflow = {
   onComplete?: string;
   onSuccess?: string;
   onFailure?: string;
+  timeoutMs?: number; // default timeout for all steps
 };
 
 type SynkroWorkflowStep = {
@@ -314,6 +325,7 @@ type SynkroWorkflowStep = {
   retry?: RetryConfig;
   onSuccess?: string;
   onFailure?: string;
+  timeoutMs?: number; // overrides workflow-level timeout
 };
 
 type HandlerCtx = {

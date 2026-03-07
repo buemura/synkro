@@ -167,6 +167,53 @@ describe("Synkro", () => {
     });
   });
 
+  describe("schema validation", () => {
+    it("should throw on publish when global schema validation fails", async () => {
+      const instance = await Synkro.start({
+        connectionUrl: "redis://localhost:6379",
+        schemas: {
+          "user:created": (payload) => {
+            if (!payload || typeof payload !== "object" || !("name" in payload)) {
+              throw new Error("name is required");
+            }
+          },
+        },
+      });
+
+      await expect(
+        instance.publish("user:created", { age: 25 }),
+      ).rejects.toThrow("name is required");
+    });
+
+    it("should publish when global schema validation passes", async () => {
+      const instance = await Synkro.start({
+        connectionUrl: "redis://localhost:6379",
+        schemas: {
+          "user:created": (payload) => {
+            if (!payload || typeof payload !== "object" || !("name" in payload)) {
+              throw new Error("name is required");
+            }
+          },
+        },
+      });
+
+      await instance.publish("user:created", { name: "Alice" });
+      expect(mockPublish).toHaveBeenCalled();
+    });
+
+    it("should not validate when no schema is registered for the event", async () => {
+      const instance = await Synkro.start({
+        connectionUrl: "redis://localhost:6379",
+        schemas: {
+          "other:event": () => { throw new Error("should not be called"); },
+        },
+      });
+
+      await instance.publish("user:created", { anything: true });
+      expect(mockPublish).toHaveBeenCalled();
+    });
+  });
+
   describe("stop", () => {
     it("should disconnect all Redis clients", async () => {
       const instance = await Synkro.start({
@@ -176,6 +223,21 @@ describe("Synkro", () => {
       await instance.stop();
 
       expect(mockQuit).toHaveBeenCalledTimes(3);
+    });
+
+    it("should disconnect immediately when no handlers are active", async () => {
+      vi.useFakeTimers();
+      const instance = await Synkro.start({
+        connectionUrl: "redis://localhost:6379",
+      });
+
+      const stopPromise = instance.stop();
+      // Should resolve quickly without waiting for drain timeout
+      await vi.advanceTimersByTimeAsync(0);
+      await stopPromise;
+
+      expect(mockQuit).toHaveBeenCalledTimes(3);
+      vi.useRealTimers();
     });
   });
 });

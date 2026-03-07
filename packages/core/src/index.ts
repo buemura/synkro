@@ -1,4 +1,5 @@
 export { Synkro } from "./synkro.js";
+export { Logger } from "./logger.js";
 export { OnEvent, OnWorkflowStep } from "./handlers/index.js";
 export type { TransportManager } from "./transport/index.js";
 export type {
@@ -10,6 +11,7 @@ export type {
   RetentionConfig,
   RetryBackoffStrategy,
   RetryConfig,
+  SchemaValidator,
   SynkroEvent,
   SynkroIntrospection,
   SynkroOptions,

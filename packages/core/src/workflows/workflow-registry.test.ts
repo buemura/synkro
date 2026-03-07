@@ -1327,4 +1327,144 @@ describe("WorkflowRegistry", () => {
       );
     });
   });
+
+  describe("step timeout", () => {
+    it("should publish failure event when step times out", async () => {
+      vi.useFakeTimers();
+      const workflow: SynkroWorkflow = {
+        name: "timeout-workflow",
+        steps: [{ type: "slow-step", handler: vi.fn(), timeoutMs: 5000 }],
+      };
+
+      registry.registerWorkflows([workflow]);
+      await registry.startWorkflow("timeout-workflow", "req-timeout", { data: 1 });
+
+      // Advance past the timeout
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:workflow:timeout-workflow:slow-step:failed",
+        expect.stringContaining("timed out"),
+      );
+
+      vi.useRealTimers();
+    });
+
+    it("should not trigger timeout when step completes before deadline", async () => {
+      vi.useFakeTimers();
+      const workflow: SynkroWorkflow = {
+        name: "fast-workflow",
+        steps: [{ type: "fast-step", handler: vi.fn(), timeoutMs: 5000 }],
+      };
+
+      registry.registerWorkflows([workflow]);
+
+      // Mock state for step completion
+      vi.mocked(mockRedis.getCache).mockResolvedValueOnce(
+        JSON.stringify({ workflowName: "fast-workflow", currentStep: 0, status: "running" }),
+      );
+
+      await registry.startWorkflow("fast-workflow", "req-fast", { data: 1 });
+
+      // Simulate step completion before timeout
+      const completionCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCallback = completionCalls.find(
+        (c) => c[0] === "event:workflow:fast-workflow:fast-step:completed",
+      )?.[1] as (message: string) => void;
+
+      completionCallback(JSON.stringify({ requestId: "req-fast", payload: { data: 1 } }));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Clear publishMessage calls so far
+      const callsBefore = vi.mocked(mockRedis.publishMessage).mock.calls.length;
+
+      // Advance past timeout — should NOT publish failure
+      await vi.advanceTimersByTimeAsync(5000);
+
+      const callsAfter = vi.mocked(mockRedis.publishMessage).mock.calls.length;
+      expect(callsAfter).toBe(callsBefore);
+
+      vi.useRealTimers();
+    });
+
+    it("should use workflow-level timeoutMs when step has no timeout", async () => {
+      vi.useFakeTimers();
+      const workflow: SynkroWorkflow = {
+        name: "wf-timeout",
+        steps: [{ type: "step1", handler: vi.fn() }],
+        timeoutMs: 3000,
+      };
+
+      registry.registerWorkflows([workflow]);
+      await registry.startWorkflow("wf-timeout", "req-wf-to", { data: 1 });
+
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:workflow:wf-timeout:step1:failed",
+        expect.stringContaining("timed out"),
+      );
+
+      vi.useRealTimers();
+    });
+
+    it("should prefer step-level timeoutMs over workflow-level", async () => {
+      vi.useFakeTimers();
+      const workflow: SynkroWorkflow = {
+        name: "override-timeout",
+        steps: [{ type: "step1", handler: vi.fn(), timeoutMs: 1000 }],
+        timeoutMs: 5000,
+      };
+
+      registry.registerWorkflows([workflow]);
+      await registry.startWorkflow("override-timeout", "req-override", {});
+
+      // Step timeout is 1000ms, workflow is 5000ms — step should win
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:workflow:override-timeout:step1:failed",
+        expect.stringContaining("timed out"),
+      );
+
+      vi.useRealTimers();
+    });
+
+    it("should not set timer when no timeout is configured", async () => {
+      vi.useFakeTimers();
+      const workflow: SynkroWorkflow = {
+        name: "no-timeout",
+        steps: [{ type: "step1", handler: vi.fn() }],
+      };
+
+      registry.registerWorkflows([workflow]);
+      await registry.startWorkflow("no-timeout", "req-no-to", {});
+
+      // Record calls before advancing
+      const callsBefore = vi.mocked(mockRedis.publishMessage).mock.calls.length;
+
+      // Advance a long time — no timeout should fire
+      await vi.advanceTimersByTimeAsync(60000);
+
+      // Only the initial startWorkflow publish should have happened
+      const callsAfter = vi.mocked(mockRedis.publishMessage).mock.calls.length;
+      expect(callsAfter).toBe(callsBefore);
+
+      vi.useRealTimers();
+    });
+
+    it("should include timeoutMs in introspection", () => {
+      const workflow: SynkroWorkflow = {
+        name: "introspect-timeout",
+        steps: [{ type: "step1", handler: vi.fn(), timeoutMs: 2000 }],
+        timeoutMs: 5000,
+      };
+
+      registry.registerWorkflows([workflow]);
+      const info = registry.getRegisteredWorkflows();
+
+      expect(info[0]!.timeoutMs).toBe(5000);
+      expect(info[0]!.steps[0]!.timeoutMs).toBe(2000);
+    });
+  });
 });

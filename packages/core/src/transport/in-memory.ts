@@ -1,4 +1,4 @@
-import { logger } from "../logger.js";
+import { Logger } from "../logger.js";
 
 import type { TransportManager } from "./transport.js";
 
@@ -6,6 +6,11 @@ export class InMemoryManager implements TransportManager {
   private subscriptions = new Map<string, Set<(message: string) => void>>();
   private cache = new Map<string, string>();
   private cacheExpiry = new Map<string, number>();
+  private logger: Logger;
+
+  constructor(logger?: Logger) {
+    this.logger = logger ?? new Logger();
+  }
 
   async publishMessage(channel: string, message: string): Promise<void> {
     const callbacks = this.subscriptions.get(channel);
@@ -26,7 +31,7 @@ export class InMemoryManager implements TransportManager {
       this.subscriptions.set(channel, new Set());
     }
     this.subscriptions.get(channel)!.add(callback);
-    logger.debug(`Subscribed to channel "${channel}" (in-memory).`);
+    this.logger.debug(`Subscribed to channel "${channel}" (in-memory).`);
   }
 
   async getCache(key: string): Promise<string | null> {

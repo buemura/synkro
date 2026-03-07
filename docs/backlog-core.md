@@ -34,9 +34,8 @@ No way to unregister an event handler or unsubscribe from a channel at runtime. 
 ### ~~TD-05: `processingLocks` grow unbounded~~ ✅ Resolved in v0.11.0
 Added warning logs when `processingLocks` exceeds 1000 entries in both `HandlerRegistry` and `WorkflowRegistry`. Existing `finally` block cleanup verified correct. Warning enables production monitoring of potential lock accumulation.
 
-### TD-06: Global mutable logger state
-**File:** `packages/core/src/logger.ts:1`
-`debugEnabled` is a module-level mutable boolean. If multiple `Synkro` instances are created with different `debug` settings, the last one wins globally. Logger should be scoped per instance.
+### ~~TD-06: Global mutable logger state~~ ✅ Resolved in v0.14.0
+Logger is now a class (`Logger`) with instance-level `debugEnabled` state. Each `Synkro` instance creates its own `Logger` and passes it to all registries. Multiple instances with different `debug` settings no longer conflict.
 
 ### ~~TD-07: Hardcoded workflow state TTL~~ ✅ Resolved in v0.13.0
 Workflow state TTL is now configurable via `retention.stateTtl` in `SynkroOptions`. Subsumed by IMP-08.
@@ -52,14 +51,14 @@ Support publishing events on a schedule or with a delay (e.g., `synkro.schedule(
 ### ~~FT-03: Idempotency and deduplication support `[SEC]`~~ ✅ Resolved in v0.9.0 (TD-03)
 Transport-level message dedup added to `RedisManager` using bounded in-memory cache keyed by `channel + requestId`. Handler and workflow registries also have distributed Redis locks (`setCacheIfNotExists`) for cross-instance dedup. Remaining risk: replay attacks with forged `requestId` values — mitigated by event schema validation (IMP-04).
 
-### FT-06: Workflow timeout
-No timeout mechanism for workflows or individual steps. A step that hangs will leave the workflow in `running` state forever. Add `timeout` to `SynkroWorkflowStep` and `SynkroWorkflow`.
+### ~~FT-06: Workflow timeout~~ ✅ Resolved in v0.14.0
+`SynkroWorkflowStep` and `SynkroWorkflow` now support an optional `timeoutMs` field. When a step exceeds its timeout, a synthetic failure event is published, triggering the `onFailure` path or marking the workflow as failed. Step-level timeout overrides workflow-level.
 
-### IMP-04: Event schema validation `[SEC]`
-No validation on event payloads at publish or subscribe time. Integrating a schema registry (e.g., Zod schemas per event type) would catch malformed payloads early. **Security note:** Unvalidated payloads can carry injection vectors through the system if handlers pass data to databases, templates, or shell commands.
+### ~~IMP-04: Event schema validation `[SEC]`~~ ✅ Resolved in v0.14.0
+`SynkroOptions` now accepts a `schemas` map (`Record<string, SchemaValidator>`) for global event-type validation. Per-event schemas can also be set via the `schema` field on `SynkroEvent`. Validation occurs at publish time (throws synchronously) and at handler dispatch (global: drops message; per-entry: triggers failure). `SchemaValidator` is a simple `(payload: unknown) => void` function that throws on invalid input — compatible with Zod, Joi, or any validation library.
 
-### IMP-06: Graceful shutdown
-`stop()` disconnects Redis but doesn't wait for in-flight handlers to complete. Should drain active handlers before disconnecting to prevent data loss.
+### ~~IMP-06: Graceful shutdown~~ ✅ Resolved in v0.14.0
+`stop()` now drains active handlers before disconnecting. Polls `processingLocks.size` on both `HandlerRegistry` and `WorkflowRegistry` every 50ms until all handlers complete or the `drainTimeout` (default 5000ms, configurable via `SynkroOptions.drainTimeout`) is reached. Logs a warning if forced to disconnect with active handlers.
 
 ### ~~IMP-02: Error object in failure events~~ ✅ Resolved in v0.11.0
 Failure events now include an `errors` array with serialized error details (`message`, `name`) from rejected handlers. Success events remain unchanged. Handles both `Error` instances and non-Error thrown values.
@@ -68,9 +67,8 @@ Failure events now include an `errors` array with serialized error details (`mes
 
 ## P2 - Medium
 
-### TD-03: In-memory transport ignores TTL
-**File:** `packages/core/src/transport/in-memory.ts:39`
-`setCache` accepts `_ttlSeconds` but never uses it. Cached entries persist forever in memory, making in-memory behavior diverge from Redis and hiding bugs during development.
+### ~~TD-03: In-memory transport ignores TTL~~ ✅ Resolved in v0.14.0
+`InMemoryManager` now correctly applies TTL via `applyTtl()` in `setCache()` and `setCacheIfNotExists()`, with lazy eviction on read via `evictIfExpired()`. The original `_ttlSeconds` unused parameter was renamed and wired up in a prior change.
 
 ### TD-09: `eslint-disable` for decorator types
 **File:** `packages/core/src/handlers/decorators.ts:17-18`
@@ -137,6 +135,6 @@ Support nesting workflows as steps within other workflows, enabling reusable wor
 | Item | Risk | Description |
 |------|------|-------------|
 | ~~TD-13~~ | ~~High~~ | ✅ Resolved in v0.9.2 — safe parse with drop on malformed input |
-| IMP-04 | High | No payload schema validation - injection can propagate through handlers |
+| ~~IMP-04~~ | ~~High~~ | ✅ Resolved in v0.14.0 — schema validation at publish and handler dispatch |
 | ~~FT-03~~ | ~~Medium~~ | ✅ Resolved in v0.9.0 — transport-level dedup + distributed locks |
 | ~~TD-08~~ | ~~Medium~~ | ✅ Resolved in v0.11.0 — explicit validation with error on invalid transport |

@@ -6,7 +6,7 @@ import {
   discoverWorkflowStepHandlers,
 } from "./handlers/index.js";
 import { InMemoryManager, RedisManager } from "./transport/index.js";
-import { setDebug } from "./logger.js";
+import { Logger, setDebug } from "./logger.js";
 import { WorkflowRegistry } from "./workflows/index.js";
 
 import type {
@@ -14,30 +14,40 @@ import type {
   HandlerFunction,
   RetentionConfig,
   RetryConfig,
+  SchemaValidator,
   SynkroIntrospection,
   SynkroOptions,
   SynkroWorkflow,
 } from "./types.js";
 import type { TransportManager } from "./transport/index.js";
 
+const DEFAULT_DRAIN_TIMEOUT = 5000;
+const DRAIN_POLL_INTERVAL = 50;
+
 export class Synkro {
   private transport: TransportManager;
   private handlerRegistry: HandlerRegistry;
   private workflowRegistry: WorkflowRegistry;
+  private logger: Logger;
+  private readonly drainTimeout: number;
 
-  private constructor(transport: TransportManager, retention?: RetentionConfig) {
+  private constructor(transport: TransportManager, logger: Logger, retention?: RetentionConfig, drainTimeout?: number) {
     this.transport = transport;
-    this.handlerRegistry = new HandlerRegistry(transport, retention);
-    this.workflowRegistry = new WorkflowRegistry(transport, this.handlerRegistry, retention);
+    this.logger = logger;
+    this.drainTimeout = drainTimeout ?? DEFAULT_DRAIN_TIMEOUT;
+    this.handlerRegistry = new HandlerRegistry(transport, retention, this.logger);
+    this.workflowRegistry = new WorkflowRegistry(transport, this.handlerRegistry, retention, this.logger);
     this.handlerRegistry.setPublishFn(this.publish.bind(this));
   }
 
   static async start(options: SynkroOptions): Promise<Synkro> {
     setDebug(options.debug ?? false);
 
+    const logger = new Logger(options.debug ?? false);
+
     let transport: TransportManager;
     if (options.transport === "in-memory") {
-      transport = new InMemoryManager();
+      transport = new InMemoryManager(logger);
     } else if (options.transport === "redis" || options.transport === undefined) {
       if (!options.connectionUrl) {
         throw new Error("connectionUrl is required when using Redis transport");
@@ -49,16 +59,22 @@ export class Synkro {
       );
     }
 
-    const instance = new Synkro(transport, options.retention);
+    const instance = new Synkro(transport, logger, options.retention, options.drainTimeout);
 
     // Patch decorated workflow step handlers before registering workflows
     const workflows = options.workflows
       ? instance.patchWorkflowHandlers(options.workflows, options.handlers ?? [])
       : [];
 
+    if (options.schemas) {
+      for (const [eventType, schema] of Object.entries(options.schemas)) {
+        instance.handlerRegistry.registerSchema(eventType, schema);
+      }
+    }
+
     if (options.events) {
       for (const event of options.events) {
-        instance.on(event.type, event.handler, event.retry);
+        instance.on(event.type, event.handler, event.retry, event.schema);
       }
     }
 
@@ -88,8 +104,8 @@ export class Synkro {
     }
   }
 
-  on(eventType: string, handler: HandlerFunction, retry?: RetryConfig): void {
-    this.handlerRegistry.register(eventType, handler, retry);
+  on(eventType: string, handler: HandlerFunction, retry?: RetryConfig, schema?: SchemaValidator): void {
+    this.handlerRegistry.register(eventType, handler, retry, schema);
   }
 
   async publish(
@@ -97,6 +113,11 @@ export class Synkro {
     payload?: unknown,
     requestId?: string,
   ): Promise<string> {
+    const schema = this.handlerRegistry.getSchema(event);
+    if (schema) {
+      schema(payload);
+    }
+
     requestId = requestId ?? randomUUID();
 
     if (this.workflowRegistry.hasWorkflow(event)) {
@@ -123,6 +144,22 @@ export class Synkro {
   }
 
   async stop(): Promise<void> {
+    const deadline = Date.now() + this.drainTimeout;
+
+    while (
+      (this.handlerRegistry.activeCount > 0 || this.workflowRegistry.activeCount > 0) &&
+      Date.now() < deadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, DRAIN_POLL_INTERVAL));
+    }
+
+    const remaining = this.handlerRegistry.activeCount + this.workflowRegistry.activeCount;
+    if (remaining > 0) {
+      this.logger.warn(
+        `[Synkro] - Drain timeout reached with ${remaining} active handler(s). Forcing disconnect.`,
+      );
+    }
+
     await this.transport.disconnect();
   }
 

@@ -1,4 +1,4 @@
-import { logger } from "../logger.js";
+import { Logger } from "../logger.js";
 
 import type { HandlerRegistry } from "../handlers/handler-registry.js";
 import type { TransportManager } from "../transport/transport.js";
@@ -19,6 +19,7 @@ export class WorkflowRegistry {
   private branchTargets = new Map<string, Set<string>>();
   private processingLocks = new Set<string>();
   private lockQueues = new Map<string, Promise<void>>();
+  private activeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly lockTtl: number;
   private readonly dedupTtl: number;
   private readonly stateTtl: number;
@@ -27,6 +28,7 @@ export class WorkflowRegistry {
     private redis: TransportManager,
     private handlerRegistry: HandlerRegistry,
     retention?: RetentionConfig,
+    private readonly logger: Logger = new Logger(),
   ) {
     this.lockTtl = retention?.lockTtl ?? DEFAULT_LOCK_TTL;
     this.dedupTtl = retention?.dedupTtl ?? DEFAULT_DEDUPE_TTL;
@@ -54,6 +56,10 @@ export class WorkflowRegistry {
     }
   }
 
+  get activeCount(): number {
+    return this.processingLocks.size;
+  }
+
   getRegisteredWorkflows(): WorkflowInfo[] {
     return Array.from(this.workflows.values()).map((w) => ({
       name: w.name,
@@ -62,10 +68,12 @@ export class WorkflowRegistry {
         ...(s.retry && { retry: s.retry }),
         ...(s.onSuccess && { onSuccess: s.onSuccess }),
         ...(s.onFailure && { onFailure: s.onFailure }),
+        ...(s.timeoutMs && { timeoutMs: s.timeoutMs }),
       })),
       ...(w.onComplete && { onComplete: w.onComplete }),
       ...(w.onSuccess && { onSuccess: w.onSuccess }),
       ...(w.onFailure && { onFailure: w.onFailure }),
+      ...(w.timeoutMs && { timeoutMs: w.timeoutMs }),
     }));
   }
 
@@ -91,7 +99,7 @@ export class WorkflowRegistry {
       }
 
       this.subscribeToWorkflowEvents(workflow);
-      logger.debug(
+      this.logger.debug(
         `[WorkflowRegistry] - Workflow "${workflow.name}" registered with ${workflow.steps.length} steps`,
       );
     }
@@ -104,7 +112,7 @@ export class WorkflowRegistry {
   ): void {
     const workflow = this.workflows.get(workflowName);
     if (!workflow) {
-      logger.warn(
+      this.logger.warn(
         `[WorkflowRegistry] - Workflow "${workflowName}" not found for step handler "${stepType}"`,
       );
       return;
@@ -139,11 +147,12 @@ export class WorkflowRegistry {
 
     const firstStep = workflow.steps[0]!;
     const channel = this.stepChannel(workflowName, firstStep.type);
-    logger.debug(
+    this.logger.debug(
       `[WorkflowRegistry] - Starting workflow "${workflowName}" (requestId: ${requestId}), publishing "${firstStep.type}"`,
     );
 
     await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
+    this.startStepTimer(workflow, 0, requestId, payload);
   }
 
   private subscribeToWorkflowEvents(workflow: SynkroWorkflow): void {
@@ -183,13 +192,15 @@ export class WorkflowRegistry {
   ): Promise<void> {
     const lockKey = `${requestId}:${workflow.name}:completion:${stepIndex}`;
     await this.withStepTransitionClaim(lockKey, async () => {
+      this.clearStepTimer(requestId, workflow.name, stepIndex);
+
       const state = await this.getState(requestId, workflow.name);
       if (!state || state.workflowName !== workflow.name || state.status !== "running") {
         return;
       }
 
       if (state.currentStep !== stepIndex) {
-        logger.debug(
+        this.logger.debug(
           `[WorkflowRegistry] - Ignoring stale completion for "${workflow.name}" (requestId: ${requestId}): expected step ${state.currentStep}, got ${stepIndex}`,
         );
         return;
@@ -201,7 +212,7 @@ export class WorkflowRegistry {
       if (onSuccess) {
         const targetIndex = this.findStepIndex(workflow, onSuccess);
         if (targetIndex === -1) {
-          logger.error(
+          this.logger.error(
             `[WorkflowRegistry] - onSuccess target "${onSuccess}" not found in workflow "${workflow.name}"`,
           );
           return;
@@ -213,10 +224,11 @@ export class WorkflowRegistry {
       const nextStepIndex = this.findNextStep(workflow, stepIndex);
 
       if (nextStepIndex === -1) {
+        this.clearAllTimers(requestId, workflow.name, workflow.steps.length);
         state.status = "completed";
         state.currentStep = stepIndex;
         await this.saveState(requestId, state);
-        logger.debug(
+        this.logger.debug(
           `[WorkflowRegistry] - Workflow "${workflow.name}" completed (requestId: ${requestId})`,
         );
         await this.triggerNextWorkflows(
@@ -240,13 +252,15 @@ export class WorkflowRegistry {
   ): Promise<void> {
     const lockKey = `${requestId}:${workflow.name}:failure:${stepIndex}`;
     await this.withStepTransitionClaim(lockKey, async () => {
+      this.clearStepTimer(requestId, workflow.name, stepIndex);
+
       const state = await this.getState(requestId, workflow.name);
       if (!state || state.workflowName !== workflow.name || state.status !== "running") {
         return;
       }
 
       if (state.currentStep !== stepIndex) {
-        logger.debug(
+        this.logger.debug(
           `[WorkflowRegistry] - Ignoring stale failure for "${workflow.name}" (requestId: ${requestId}): expected step ${state.currentStep}, got ${stepIndex}`,
         );
         return;
@@ -258,7 +272,7 @@ export class WorkflowRegistry {
       if (onFailure) {
         const targetIndex = this.findStepIndex(workflow, onFailure);
         if (targetIndex === -1) {
-          logger.error(
+          this.logger.error(
             `[WorkflowRegistry] - onFailure target "${onFailure}" not found in workflow "${workflow.name}"`,
           );
           return;
@@ -267,9 +281,10 @@ export class WorkflowRegistry {
         return;
       }
 
+      this.clearAllTimers(requestId, workflow.name, workflow.steps.length);
       state.status = "failed";
       await this.saveState(requestId, state);
-      logger.error(
+      this.logger.error(
         `[WorkflowRegistry] - Workflow "${workflow.name}" failed at step "${currentStep.type}" (requestId: ${requestId})`,
       );
       await this.triggerNextWorkflows(workflow, "failed", requestId, payload);
@@ -291,11 +306,12 @@ export class WorkflowRegistry {
 
     const targetStep = workflow.steps[targetIndex]!;
     const channel = this.stepChannel(workflow.name, targetStep.type);
-    logger.debug(
+    this.logger.debug(
       `[WorkflowRegistry] - Workflow "${workflow.name}" advancing to step ${targetIndex}: "${targetStep.type}" (requestId: ${requestId})`,
     );
 
     await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
+    this.startStepTimer(workflow, targetIndex, requestId, payload);
   }
 
   private async triggerNextWorkflows(
@@ -318,15 +334,65 @@ export class WorkflowRegistry {
 
     for (const target of targets) {
       if (this.workflows.has(target)) {
-        logger.debug(
+        this.logger.debug(
           `[WorkflowRegistry] - Workflow "${workflow.name}" triggering workflow "${target}" (requestId: ${requestId})`,
         );
         await this.startWorkflow(target, requestId, payload);
       } else {
-        logger.error(
+        this.logger.error(
           `[WorkflowRegistry] - Chained workflow "${target}" not found (from "${workflow.name}")`,
         );
       }
+    }
+  }
+
+  private timerKey(requestId: string, workflowName: string, stepIndex: number): string {
+    return `${requestId}:${workflowName}:${stepIndex}`;
+  }
+
+  private startStepTimer(
+    workflow: SynkroWorkflow,
+    stepIndex: number,
+    requestId: string,
+    payload: unknown,
+  ): void {
+    const step = workflow.steps[stepIndex]!;
+    const timeoutMs = step.timeoutMs ?? workflow.timeoutMs;
+    if (!timeoutMs) return;
+
+    const key = this.timerKey(requestId, workflow.name, stepIndex);
+    const channel = this.stepChannel(workflow.name, step.type);
+
+    const timer = setTimeout(() => {
+      this.activeTimers.delete(key);
+      this.logger.warn(
+        `[WorkflowRegistry] - Step "${step.type}" timed out after ${timeoutMs}ms in workflow "${workflow.name}" (requestId: ${requestId})`,
+      );
+      void this.redis.publishMessage(
+        `event:${channel}:failed`,
+        JSON.stringify({
+          requestId,
+          payload,
+          errors: [{ message: `Step "${step.type}" timed out after ${timeoutMs}ms`, name: "TimeoutError" }],
+        }),
+      );
+    }, timeoutMs);
+
+    this.activeTimers.set(key, timer);
+  }
+
+  private clearStepTimer(requestId: string, workflowName: string, stepIndex: number): void {
+    const key = this.timerKey(requestId, workflowName, stepIndex);
+    const timer = this.activeTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      this.activeTimers.delete(key);
+    }
+  }
+
+  private clearAllTimers(requestId: string, workflowName: string, stepCount: number): void {
+    for (let i = 0; i < stepCount; i++) {
+      this.clearStepTimer(requestId, workflowName, i);
     }
   }
 
@@ -404,7 +470,7 @@ export class WorkflowRegistry {
     const dedupeKey = this.dedupeKey(lockKey);
     const alreadyProcessed = await this.redis.getCache(dedupeKey);
     if (alreadyProcessed === "1") {
-      logger.debug(
+      this.logger.debug(
         `[WorkflowRegistry] - Duplicate transition ignored (${lockKey})`,
       );
       return;
@@ -412,7 +478,7 @@ export class WorkflowRegistry {
 
     this.processingLocks.add(lockKey);
     if (this.processingLocks.size > 1000) {
-      logger.warn(
+      this.logger.warn(
         `[WorkflowRegistry] - processingLocks size exceeded 1000 (current: ${this.processingLocks.size})`,
       );
     }
@@ -458,14 +524,14 @@ export class WorkflowRegistry {
     try {
       parsed = JSON.parse(message) as { requestId: string; payload: unknown };
     } catch {
-      logger.error(
+      this.logger.error(
         `[WorkflowRegistry] - Malformed message, dropping: ${message}`,
       );
       return null;
     }
 
     if (!parsed.requestId || typeof parsed.requestId !== "string") {
-      logger.error(
+      this.logger.error(
         `[WorkflowRegistry] - Missing or invalid requestId, dropping message`,
       );
       return null;

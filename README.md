@@ -19,7 +19,7 @@ Lightweight event-driven workflow orchestrator for Node.js. Define standalone ev
 
 | Package                           | Description                                           | Version |
 | --------------------------------- | ----------------------------------------------------- | ------- |
-| [@synkro/core](./packages/core)     | Core orchestrator with Redis and in-memory transports | [0.13.0](./release/v0.13.0.md)  |
+| [@synkro/core](./packages/core)     | Core orchestrator with Redis and in-memory transports | [0.14.0](./release/v0.14.0.md)  |
 | [@synkro/ui](./packages/ui)         | Web dashboard for visualizing events and workflows    | [0.2.1](./release)              |
 | [@synkro/nestjs](./packages/nestjs) | NestJS integration module                             | [0.5.0](./release/nestjs-v0.5.0.md) |
 | [@synkro/next](./packages/nextjs)   | Next.js integration                                   | [0.1.1](./release)              |

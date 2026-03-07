@@ -620,4 +620,77 @@ describe("HandlerRegistry", () => {
       );
     });
   });
+
+  describe("schema validation", () => {
+    it("should drop message when global schema validation fails", async () => {
+      const handler = vi.fn();
+      registry.registerSchema("user:created", (payload) => {
+        if (!payload || typeof payload !== "object" || !("name" in payload)) {
+          throw new Error("missing name");
+        }
+      });
+      registry.register("user:created", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-invalid", payload: { age: 25 } }));
+      await flushPromises();
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
+
+    it("should pass message when global schema validation succeeds", async () => {
+      const handler = vi.fn();
+      registry.registerSchema("user:created", (payload) => {
+        if (!payload || typeof payload !== "object" || !("name" in payload)) {
+          throw new Error("missing name");
+        }
+      });
+      registry.register("user:created", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-valid", payload: { name: "Alice" } }));
+      await flushPromises();
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ payload: { name: "Alice" } }),
+      );
+    });
+
+    it("should fail handler when per-entry schema validation fails", async () => {
+      const handler = vi.fn();
+      const schema = (payload: unknown) => {
+        if (!payload || typeof payload !== "object" || !("email" in payload)) {
+          throw new Error("missing email");
+        }
+      };
+      registry.register("user:created", handler, undefined, schema);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-no-email", payload: { name: "Alice" } }));
+      await flushPromises();
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:user:created:failed",
+        expect.any(String),
+      );
+    });
+
+    it("should return schema via getSchema", () => {
+      const schema = vi.fn();
+      registry.registerSchema("test:event", schema);
+      expect(registry.getSchema("test:event")).toBe(schema);
+    });
+
+    it("should return undefined for unregistered schema", () => {
+      expect(registry.getSchema("unknown:event")).toBeUndefined();
+    });
+  });
 });

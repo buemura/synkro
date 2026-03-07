@@ -1,3 +1,5 @@
+export type SchemaValidator = (payload: unknown) => void;
+
 export type RetryBackoffStrategy = "fixed" | "exponential";
 
 export type RetryConfig = {
@@ -12,6 +14,7 @@ export type SynkroEvent = {
   type: string;
   handler: HandlerFunction;
   retry?: RetryConfig;
+  schema?: SchemaValidator;
 };
 
 export type SynkroWorkflowStep = {
@@ -20,6 +23,7 @@ export type SynkroWorkflowStep = {
   retry?: RetryConfig;
   onSuccess?: string;
   onFailure?: string;
+  timeoutMs?: number;
 };
 
 export type SynkroWorkflow = {
@@ -28,6 +32,7 @@ export type SynkroWorkflow = {
   onComplete?: string;
   onSuccess?: string;
   onFailure?: string;
+  timeoutMs?: number;
 };
 
 export type RetentionConfig = {
@@ -45,6 +50,8 @@ export type SynkroOptions = {
   workflows?: SynkroWorkflow[];
   handlers?: object[];
   retention?: RetentionConfig;
+  schemas?: Record<string, SchemaValidator>;
+  drainTimeout?: number;
 };
 
 export type PublishFunction = (
@@ -72,6 +79,7 @@ export type WorkflowStepInfo = {
   retry?: RetryConfig;
   onSuccess?: string;
   onFailure?: string;
+  timeoutMs?: number;
 };
 
 export type WorkflowInfo = {
@@ -80,6 +88,7 @@ export type WorkflowInfo = {
   onComplete?: string;
   onSuccess?: string;
   onFailure?: string;
+  timeoutMs?: number;
 };
 
 export type SynkroIntrospection = {
