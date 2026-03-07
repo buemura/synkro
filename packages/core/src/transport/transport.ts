@@ -1,5 +1,5 @@
 export interface TransportManager {
-  publishMessage(channel: string, message: string): void;
+  publishMessage(channel: string, message: string): Promise<void>;
   subscribeToChannel(
     channel: string,
     callback: (message: string) => void,

@@ -31,7 +31,7 @@ export type SynkroWorkflow = {
 };
 
 export type SynkroOptions = {
-  transport: "redis" | "in-memory";
+  transport?: "redis" | "in-memory";
   connectionUrl?: string;
   debug?: boolean;
   events?: SynkroEvent[];

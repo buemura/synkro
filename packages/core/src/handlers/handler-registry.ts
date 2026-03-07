@@ -38,6 +38,13 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function serializeError(err: unknown): { message: string; name?: string } {
+  if (err instanceof Error) {
+    return { message: err.message, name: err.name };
+  }
+  return { message: String(err) };
+}
+
 const PROCESSING_LOCK_TTL_SECONDS = 300;
 const DEDUPE_TTL_SECONDS = 86400;
 
@@ -141,6 +148,11 @@ export class HandlerRegistry {
     }
 
     this.processingLocks.add(localLockKey);
+    if (this.processingLocks.size > 1000) {
+      logger.warn(
+        `[HandlerRegistry] - processingLocks size exceeded 1000 (current: ${this.processingLocks.size})`,
+      );
+    }
 
     const distributedLockKey = this.distributedLockKey(localLockKey);
     let distributedLockAcquired = false;
@@ -185,12 +197,20 @@ export class HandlerRegistry {
         }
       }
 
-      this.redis.publishMessage(
+      const eventPayload: Record<string, unknown> = {
+        requestId: event.requestId,
+        payload: event.payload,
+      };
+
+      if (!allSucceeded) {
+        eventPayload.errors = results
+          .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+          .map((r) => serializeError(r.reason));
+      }
+
+      await this.redis.publishMessage(
         `event:${eventType}:${allSucceeded ? "completed" : "failed"}`,
-        JSON.stringify({
-          requestId: event.requestId,
-          payload: event.payload,
-        }),
+        JSON.stringify(eventPayload),
       );
 
       await this.redis.setCache(dedupeKey, "1", DEDUPE_TTL_SECONDS);

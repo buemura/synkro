@@ -8,7 +8,7 @@ function flushPromises(): Promise<void> {
 
 function createMockRedis(): RedisManager {
   return {
-    publishMessage: vi.fn(),
+    publishMessage: vi.fn().mockResolvedValue(undefined),
     subscribeToChannel: vi.fn(),
     getCache: vi.fn(),
     setCacheIfNotExists: vi.fn().mockResolvedValue(true),
@@ -221,9 +221,51 @@ describe("HandlerRegistry", () => {
         JSON.stringify({
           requestId: "req-123",
           payload: { name: "Alice" },
+          errors: [{ message: "fail", name: "Error" }],
         }),
       );
       vi.useRealTimers();
+    });
+
+    it("should serialize non-Error thrown values in failure events", async () => {
+      const handler = vi.fn().mockRejectedValue("string error");
+      registry.register("user:created", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock
+        .calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(
+        JSON.stringify({ requestId: "req-str-err", payload: {} }),
+      );
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:user:created:failed",
+        JSON.stringify({
+          requestId: "req-str-err",
+          payload: {},
+          errors: [{ message: "string error" }],
+        }),
+      );
+    });
+
+    it("should not include errors field in completion events", async () => {
+      const handler = vi.fn();
+      registry.register("user:created", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock
+        .calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(
+        JSON.stringify({ requestId: "req-ok", payload: {} }),
+      );
+      await flushPromises();
+
+      const publishCall = vi.mocked(mockRedis.publishMessage).mock.calls[0]!;
+      const published = JSON.parse(publishCall[1] as string) as Record<string, unknown>;
+      expect(published).not.toHaveProperty("errors");
     });
 
     it("should not publish failure event if handler succeeds after retry", async () => {

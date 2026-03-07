@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RedisManager } from "./redis.js";
 
-const mockPublish = vi.fn();
+const mockPublish = vi.fn().mockResolvedValue(1);
 const mockSubscribe = vi.fn().mockResolvedValue(1);
 const mockOn = vi.fn();
 const mockGet = vi.fn();
@@ -33,12 +33,19 @@ describe("RedisManager", () => {
   });
 
   describe("publishMessage", () => {
-    it("should publish a message to the given channel", () => {
-      redis.publishMessage("test-channel", '{"data":"value"}');
+    it("should publish a message to the given channel", async () => {
+      await redis.publishMessage("test-channel", '{"data":"value"}');
       expect(mockPublish).toHaveBeenCalledWith(
         "test-channel",
         '{"data":"value"}',
       );
+    });
+
+    it("should propagate errors from redis publish", async () => {
+      mockPublish.mockRejectedValueOnce(new Error("connection lost"));
+      await expect(
+        redis.publishMessage("test-channel", '{"data":"value"}'),
+      ).rejects.toThrow("connection lost");
     });
   });
 

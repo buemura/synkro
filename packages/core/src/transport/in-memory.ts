@@ -7,7 +7,7 @@ export class InMemoryManager implements TransportManager {
   private cache = new Map<string, string>();
   private cacheExpiry = new Map<string, number>();
 
-  publishMessage(channel: string, message: string): void {
+  async publishMessage(channel: string, message: string): Promise<void> {
     const callbacks = this.subscriptions.get(channel);
     if (!callbacks) {
       return;

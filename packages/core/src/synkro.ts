@@ -37,11 +37,15 @@ export class Synkro {
     let transport: TransportManager;
     if (options.transport === "in-memory") {
       transport = new InMemoryManager();
-    } else {
+    } else if (options.transport === "redis" || options.transport === undefined) {
       if (!options.connectionUrl) {
         throw new Error("connectionUrl is required when using Redis transport");
       }
       transport = new RedisManager(options.connectionUrl);
+    } else {
+      throw new Error(
+        `[Synkro] - Invalid transport "${String(options.transport)}". Supported values: "redis", "in-memory"`,
+      );
     }
 
     const instance = new Synkro(transport);
@@ -99,7 +103,7 @@ export class Synkro {
       return requestId;
     }
 
-    this.transport.publishMessage(
+    await this.transport.publishMessage(
       event,
       JSON.stringify({ requestId, payload }),
     );

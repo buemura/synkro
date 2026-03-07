@@ -16,10 +16,6 @@ const DEDUPE_TTL_SECONDS = 86400;
 export class WorkflowRegistry {
   private workflows = new Map<string, SynkroWorkflow>();
   private branchTargets = new Map<string, Set<string>>();
-  private eventToWorkflows = new Map<
-    string,
-    { workflow: SynkroWorkflow; stepIndex: number }[]
-  >();
   private processingLocks = new Set<string>();
   private lockQueues = new Map<string, Promise<void>>();
 
@@ -78,13 +74,6 @@ export class WorkflowRegistry {
 
       for (let i = 0; i < workflow.steps.length; i++) {
         const step = workflow.steps[i]!;
-        const key = step.type;
-
-        if (!this.eventToWorkflows.has(key)) {
-          this.eventToWorkflows.set(key, []);
-        }
-        this.eventToWorkflows.get(key)!.push({ workflow, stepIndex: i });
-
         const channel = this.stepChannel(workflow.name, step.type);
         if (step.handler) {
           this.handlerRegistry.register(channel, step.handler, step.retry);
@@ -144,7 +133,7 @@ export class WorkflowRegistry {
       `[WorkflowRegistry] - Starting workflow "${workflowName}" (requestId: ${requestId}), publishing "${firstStep.type}"`,
     );
 
-    this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
+    await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
   }
 
   private subscribeToWorkflowEvents(workflow: SynkroWorkflow): void {
@@ -296,7 +285,7 @@ export class WorkflowRegistry {
       `[WorkflowRegistry] - Workflow "${workflow.name}" advancing to step ${targetIndex}: "${targetStep.type}" (requestId: ${requestId})`,
     );
 
-    this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
+    await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
   }
 
   private async triggerNextWorkflows(
@@ -406,6 +395,11 @@ export class WorkflowRegistry {
     }
 
     this.processingLocks.add(lockKey);
+    if (this.processingLocks.size > 1000) {
+      logger.warn(
+        `[WorkflowRegistry] - processingLocks size exceeded 1000 (current: ${this.processingLocks.size})`,
+      );
+    }
 
     const distributedLockKey = this.distributedLockKey(lockKey);
     let distributedLockAcquired = false;

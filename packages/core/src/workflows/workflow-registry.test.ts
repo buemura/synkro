@@ -10,7 +10,7 @@ import type { SynkroWorkflow } from "../types.js";
 
 function createMockRedis(): RedisManager {
   return {
-    publishMessage: vi.fn(),
+    publishMessage: vi.fn().mockResolvedValue(undefined),
     subscribeToChannel: vi.fn(),
     getCache: vi.fn(),
     setCacheIfNotExists: vi.fn().mockResolvedValue(true),

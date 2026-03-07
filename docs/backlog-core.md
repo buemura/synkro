@@ -22,20 +22,17 @@ All `JSON.parse` calls in `HandlerRegistry` and `WorkflowRegistry` are now wrapp
 ### ~~TD-01: No retry backoff strategy~~ ✅ Resolved in v0.10.0
 `RetryConfig` now supports `delayMs` (base delay, default 1000ms), `backoff` (`"fixed"` or `"exponential"`), `jitter` (randomized spread around the delay), and `retryable` (predicate to skip retries for non-retryable errors). Existing `maxRetries` behavior is preserved with a default 1s fixed delay.
 
-### TD-04: Publish is fire-and-forget with no error handling
-**File:** `packages/core/src/transport/redis.ts:26-28`, `packages/core/src/transport/transport.ts`
-`RedisManager.publishMessage` calls `this.publisher.publish()` without awaiting. The `TransportManager` interface declares it as `void`, not `Promise<void>`, so errors during publish are silently swallowed. Should make publish async and propagate or record failures.
+### ~~TD-04: Publish is fire-and-forget with no error handling~~ ✅ Resolved in v0.11.0
+`TransportManager.publishMessage` is now `async` returning `Promise<void>`. `RedisManager` awaits the underlying Redis publish call. All call sites in `HandlerRegistry`, `WorkflowRegistry`, and `Synkro` now properly await publish and propagate errors.
 
-### TD-08: `SynkroOptions.transport` field inconsistency `[SEC]`
-**File:** `packages/core/src/types.ts:28`, `packages/core/src/synkro.ts:34`
-`transport` is typed as `"redis" | "in-memory"` but `Synkro.start` defaults to Redis when the value is anything other than `"in-memory"`. No validation for invalid values. **Security note:** Silent fallback to a networked transport (Redis) when an invalid value is passed could unintentionally expose events to a shared bus.
+### ~~TD-08: `SynkroOptions.transport` field inconsistency `[SEC]`~~ ✅ Resolved in v0.11.0
+`Synkro.start` now explicitly validates the `transport` field. Only `"redis"`, `"in-memory"`, and `undefined` (defaults to Redis) are accepted. Invalid values throw a descriptive error instead of silently falling back to Redis.
 
 ### TD-10: No `unsubscribe` / `off` capability
 No way to unregister an event handler or unsubscribe from a channel at runtime. Re-registering the same event calls subscribe again with no dedup. Should track per-event subscription once and provide explicit `off()` / `replace` semantics.
 
-### TD-05: `processingLocks` grow unbounded in `WorkflowRegistry`
-**File:** `packages/core/src/workflows/workflow-registry.ts:20`
-`processingLocks` is a `Set<string>` that only deletes entries in `finally` blocks. The `locks` Map (line 21) may accumulate promise entries during high-concurrency scenarios since cleanup depends on timing.
+### ~~TD-05: `processingLocks` grow unbounded~~ ✅ Resolved in v0.11.0
+Added warning logs when `processingLocks` exceeds 1000 entries in both `HandlerRegistry` and `WorkflowRegistry`. Existing `finally` block cleanup verified correct. Warning enables production monitoring of potential lock accumulation.
 
 ### TD-06: Global mutable logger state
 **File:** `packages/core/src/logger.ts:1`
@@ -65,8 +62,8 @@ No validation on event payloads at publish or subscribe time. Integrating a sche
 ### IMP-06: Graceful shutdown
 `stop()` disconnects Redis but doesn't wait for in-flight handlers to complete. Should drain active handlers before disconnecting to prevent data loss.
 
-### IMP-02: Error object in failure events
-When a handler fails, the error object is logged but not included in the failure event payload published to Redis. Downstream listeners (workflow failure handlers, monitoring) have no visibility into what went wrong.
+### ~~IMP-02: Error object in failure events~~ ✅ Resolved in v0.11.0
+Failure events now include an `errors` array with serialized error details (`message`, `name`) from rejected handlers. Success events remain unchanged. Handles both `Error` instances and non-Error thrown values.
 
 ---
 
@@ -80,9 +77,8 @@ When a handler fails, the error object is logged but not included in the failure
 **File:** `packages/core/src/handlers/decorators.ts:17-18`
 Both decorators use `@typescript-eslint/no-unsafe-function-type` disable comments. Could use more precise typings with `(...args: any[]) => any` or proper method decorator signatures.
 
-### TD-12: Dead code - `eventToWorkflows` map
-**File:** `packages/core/src/workflows/workflow-registry.ts`
-`eventToWorkflows` map is populated but never read. Remove it or implement a concrete use (query/index API).
+### ~~TD-12: Dead code - `eventToWorkflows` map~~ ✅ Resolved in v0.11.0
+Removed the unused `eventToWorkflows` map declaration and population code from `WorkflowRegistry`.
 
 ### IMP-01: Typed payload generics
 **File:** `packages/core/src/types.ts`, `packages/core/src/synkro.ts`
@@ -142,4 +138,4 @@ Support nesting workflows as steps within other workflows, enabling reusable wor
 | ~~TD-13~~ | ~~High~~ | ✅ Resolved in v0.9.2 — safe parse with drop on malformed input |
 | IMP-04 | High | No payload schema validation - injection can propagate through handlers |
 | ~~FT-03~~ | ~~Medium~~ | ✅ Resolved in v0.9.0 — transport-level dedup + distributed locks |
-| TD-08 | Medium | Silent fallback to Redis transport - unintended event exposure |
+| ~~TD-08~~ | ~~Medium~~ | ✅ Resolved in v0.11.0 — explicit validation with error on invalid transport |

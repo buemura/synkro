@@ -43,8 +43,8 @@ export class RedisManager implements TransportManager {
     });
   }
 
-  publishMessage(channel: string, message: string): void {
-    this.publisher.publish(channel, message);
+  async publishMessage(channel: string, message: string): Promise<void> {
+    await this.publisher.publish(channel, message);
   }
 
   subscribeToChannel(

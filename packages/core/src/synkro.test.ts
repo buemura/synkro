@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Synkro } from "./synkro.js";
 
-const mockPublish = vi.fn();
+const mockPublish = vi.fn().mockResolvedValue(1);
 const mockSubscribe = vi.fn().mockResolvedValue(1);
 const mockOn = vi.fn();
 const mockGet = vi.fn();
@@ -33,6 +33,15 @@ describe("Synkro", () => {
         connectionUrl: "redis://localhost:6379",
       });
       expect(instance).toBeInstanceOf(Synkro);
+    });
+
+    it("should throw for invalid transport value", async () => {
+      await expect(
+        Synkro.start({
+          transport: "kafka" as any,
+          connectionUrl: "redis://localhost:6379",
+        }),
+      ).rejects.toThrow('Invalid transport "kafka"');
     });
 
     it("should register events provided in options", async () => {
