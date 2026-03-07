@@ -1,39 +1,40 @@
 import { OnWorkflowStep, type HandlerCtx } from "@synkro/core";
 
 import { db } from "../db";
+import { EventTypes, WorkflowTypes } from "../events/event-types";
 
 export class OrderWorkflowHandler {
-  // @OnWorkflowStep("ProcessOrder", "StockUpdate")
-  // async handleStockUpdate(ctx: HandlerCtx) {
-  //   const { productId, quantity } = ctx.payload as {
-  //     productId: string;
-  //     quantity: number;
-  //   };
+  @OnWorkflowStep(WorkflowTypes.ProcessOrder, EventTypes.StockUpdate)
+  async handleStockUpdate(ctx: HandlerCtx) {
+    const { productId, quantity } = ctx.payload as {
+      productId: string;
+      quantity: number;
+    };
 
-  //   console.log(
-  //     `Stock update for product: ${productId}, quantity: ${quantity}`,
-  //   );
-  //   await new Promise((resolve) => setTimeout(resolve, 2000));
+    console.log(
+      `[OrderWorkflowHandler.handleStockUpdate] - Stock update for request: ${ctx.requestId}`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  //   db.updateProductStock(productId, quantity);
+    db.updateProductStock(productId, quantity);
 
-  //   ctx.setPayload({
-  //     productId,
-  //     quantity,
-  //     appendedData: "Stock update successful",
-  //   });
+    ctx.setPayload({
+      productId,
+      quantity,
+      appendedData: "Stock update successful",
+    });
+  }
 
-  //   await ctx.publish("IndependentEvent", { productId, quantity });
-  // }
-
-  @OnWorkflowStep("ProcessOrder", "PaymentRequested")
+  @OnWorkflowStep(WorkflowTypes.ProcessOrder, EventTypes.PaymentRequested)
   async handlePaymentRequested(ctx: HandlerCtx) {
     const { orderId, amount } = ctx.payload as {
       orderId: string;
       amount: number;
     };
 
-    console.log(`Payment requested for order: ${orderId}`);
+    console.log(
+      `[OrderWorkflowHandler.handlePaymentRequested] - Payment requested for request: ${ctx.requestId}`,
+    );
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     db.insertPayment({
@@ -45,22 +46,26 @@ export class OrderWorkflowHandler {
     db.updateOrderStatus(orderId, "processing");
   }
 
-  @OnWorkflowStep("ProcessOrder", "PaymentCompleted")
+  @OnWorkflowStep(WorkflowTypes.ProcessOrder, EventTypes.PaymentCompleted)
   async handlePaymentCompleted(ctx: HandlerCtx) {
     const { orderId } = ctx.payload as { orderId: string };
 
-    console.log(`Payment completed for order: ${orderId}`);
+    console.log(
+      `[OrderWorkflowHandler.handlePaymentCompleted] - Payment completed for request: ${ctx.requestId}`,
+    );
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     db.updatePaymentStatusByOrderId(orderId, "completed");
     db.updateOrderStatus(orderId, "payment_completed");
   }
 
-  @OnWorkflowStep("ProcessOrder", "PaymentFailed")
+  @OnWorkflowStep(WorkflowTypes.ProcessOrder, EventTypes.PaymentFailed)
   async handlePaymentFailed(ctx: HandlerCtx) {
     const { orderId } = ctx.payload as { orderId: string };
 
-    console.log(`Payment failed for order: ${orderId}`);
+    console.log(
+      `[OrderWorkflowHandler.handlePaymentFailed] - Payment failed for request: ${ctx.requestId}`,
+    );
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     db.updatePaymentStatusByOrderId(orderId, "failed");

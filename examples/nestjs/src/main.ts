@@ -22,7 +22,7 @@ async function bootstrap() {
     dashboardHandler(req, res);
   });
 
-  await app.listen(3000);
+  await app.listen(8080);
   console.log("Server is running on http://localhost:3000");
   console.log("Synkro Dashboard: http://localhost:3000/synkro");
 }

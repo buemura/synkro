@@ -1,9 +1,9 @@
 import { Synkro, type SynkroEvent, type SynkroWorkflow } from "@synkro/core";
 
+import { handleNotifyCustomer } from "../handlers/notification.handler";
 import { OrderEventHandler } from "../handlers/order-event.handler";
 import { OrderWorkflowHandler } from "../handlers/order-workflow.handler";
 import { ShipmentWorkflowHandler } from "../handlers/shipment-workflow.handler";
-import { stockUpdateHandler } from "../handlers/stock-update";
 import { EventTypes, WorkflowTypes } from "./event-types";
 
 let synkro: Synkro | null = null;
@@ -11,34 +11,10 @@ let synkro: Synkro | null = null;
 // Inline event handlers (traditional approach — still supported)
 const events: SynkroEvent[] = [
   {
-    type: "test-event",
+    type: EventTypes.NotifyCustomer,
     handler: async ({ requestId }) => {
       console.log(
-        `[Event Handler] - Handling test-event for request ${requestId}`,
-      );
-    },
-  },
-  {
-    type: "test-event-2",
-    handler: async ({ requestId }) => {
-      console.log(
-        `[Event Handler] - Handling test-event-2 for request ${requestId}`,
-      );
-    },
-  },
-  {
-    type: "test-event-3",
-    handler: async ({ requestId }) => {
-      console.log(
-        `[Event Handler] - Handling test-event for request ${requestId}`,
-      );
-    },
-  },
-  {
-    type: "test-event-4",
-    handler: async ({ requestId }) => {
-      console.log(
-        `[Event Handler] - Handling test-event for request ${requestId}`,
+        `[Event Handler] - Handling NotifyCustomer for request ${requestId}`,
       );
     },
   },
@@ -53,7 +29,6 @@ const workflows: SynkroWorkflow[] = [
     steps: [
       {
         type: EventTypes.StockUpdate,
-        handler: stockUpdateHandler,
       },
       {
         type: EventTypes.PaymentRequested,
@@ -67,20 +42,11 @@ const workflows: SynkroWorkflow[] = [
       {
         type: EventTypes.PaymentFailed,
       },
-      {
-        // Inline handler in a workflow step (mixed approach)
-        type: "TestEvent",
-        handler: async ({ requestId }) => {
-          console.log(
-            `[Event Handler] - Handling TestEvent for request ${requestId} that runs independently of the workflow's success or failure`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        },
-      },
     ],
   },
   {
     name: WorkflowTypes.StartShipment,
+    onComplete: WorkflowTypes.NotifyCustomer,
     steps: [
       {
         type: EventTypes.ShippingRequested,
@@ -92,48 +58,7 @@ const workflows: SynkroWorkflow[] = [
     steps: [
       {
         type: EventTypes.NotifyCustomer,
-      },
-    ],
-  },
-  {
-    name: "IndependentWorkflow2",
-    steps: [
-      {
-        type: "IndependentEvent",
-        handler: async ({ requestId }) => {
-          console.log(
-            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow2 for request ${requestId}`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        },
-      },
-    ],
-  },
-  {
-    name: "IndependentWorkflow3",
-    steps: [
-      {
-        type: "IndependentEvent",
-        handler: async ({ requestId }) => {
-          console.log(
-            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow3 for request ${requestId}`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        },
-      },
-    ],
-  },
-  {
-    name: "IndependentWorkflow4",
-    steps: [
-      {
-        type: "IndependentEvent",
-        handler: async ({ requestId }) => {
-          console.log(
-            `[Event Handler] - Handling IndependentEvent in IndependentWorkflow4 for request ${requestId}`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        },
+        handler: handleNotifyCustomer,
       },
     ],
   },
