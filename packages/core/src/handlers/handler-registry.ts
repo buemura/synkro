@@ -86,7 +86,22 @@ export class HandlerRegistry {
       return;
     }
 
-    const event = JSON.parse(message) as { requestId: string; payload: unknown };
+    let event: { requestId: string; payload: unknown };
+    try {
+      event = JSON.parse(message) as { requestId: string; payload: unknown };
+    } catch {
+      logger.error(
+        `[HandlerRegistry] - Malformed message on "${eventType}", dropping: ${message}`,
+      );
+      return;
+    }
+
+    if (!event.requestId || typeof event.requestId !== "string") {
+      logger.error(
+        `[HandlerRegistry] - Missing or invalid requestId on "${eventType}", dropping message`,
+      );
+      return;
+    }
 
     const localLockKey = `${event.requestId}:${eventType}`;
     if (this.processingLocks.has(localLockKey)) {

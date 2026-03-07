@@ -9,13 +9,11 @@ Items are organized by priority (P0 > P1 > P2 > P3). Security-sensitive items ar
 ### ~~TD-11: Validate workflow definitions at registration~~ ✅ Resolved
 `registerWorkflows` now validates each workflow before registration: rejects empty name, empty steps, duplicate step types, and dangling `onSuccess`/`onFailure` targets with clear error messages.
 
-### TD-13: Harden message parsing paths `[SEC]`
-**File:** `packages/core/src/handlers/handler-registry.ts`, `packages/core/src/workflows/workflow-registry.ts`
-Multiple `JSON.parse` calls assume valid message payloads. A malformed message can throw and destabilize processing paths. Should wrap with safe decode, structured logging, and drop/redirect invalid messages. **Security note:** Unvalidated parsing of external input is a vector for denial-of-service and injection if payloads reach downstream logic unsanitized.
+### ~~TD-13: Harden message parsing paths `[SEC]`~~ ✅ Resolved in v0.9.2
+All `JSON.parse` calls in `HandlerRegistry` and `WorkflowRegistry` are now wrapped with try/catch. Malformed messages and messages with missing/invalid `requestId` are logged and dropped. Workflow event callbacks parse upfront via `safeParse` before entering lock/transition logic.
 
-### IMP-07: Redis connection error handling
-**File:** `packages/core/src/transport/redis.ts:13-16`
-`RedisManager` creates three Redis connections in the constructor with no error handling. If the connection fails, errors surface as unhandled rejections. Should add connection retry logic and expose connection status.
+### ~~IMP-07: Redis connection error handling~~ ✅ Resolved in v0.9.2
+`RedisManager` now creates connections via `createClient` with exponential retry strategy (capped at 5s), error event logging, and connect event logging. Connection failures no longer surface as unhandled rejections.
 
 ---
 
@@ -142,7 +140,7 @@ Support nesting workflows as steps within other workflows, enabling reusable wor
 
 | Item | Risk | Description |
 |------|------|-------------|
-| TD-13 | High | Unvalidated `JSON.parse` on external input - DoS / injection vector |
+| ~~TD-13~~ | ~~High~~ | ✅ Resolved in v0.9.2 — safe parse with drop on malformed input |
 | IMP-04 | High | No payload schema validation - injection can propagate through handlers |
 | ~~FT-03~~ | ~~Medium~~ | ✅ Resolved in v0.9.0 — transport-level dedup + distributed locks |
 | TD-08 | Medium | Silent fallback to Redis transport - unintended event exposure |

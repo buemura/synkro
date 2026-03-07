@@ -255,5 +255,35 @@ describe("HandlerRegistry", () => {
         expect.any(String),
       );
     });
+
+    it("should drop malformed JSON messages", async () => {
+      const handler = vi.fn();
+      registry.register("user:created", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock
+        .calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback("not valid json {{{");
+      await flushPromises();
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
+
+    it("should drop messages with missing requestId", async () => {
+      const handler = vi.fn();
+      registry.register("user:created", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock
+        .calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ payload: { name: "Alice" } }));
+      await flushPromises();
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
   });
 });

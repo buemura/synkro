@@ -1058,4 +1058,38 @@ describe("WorkflowRegistry", () => {
       expect(failedStateSaves).toHaveLength(1);
     });
   });
+
+  describe("malformed message handling", () => {
+    it("should drop malformed JSON on completion channel", async () => {
+      const workflow = createTestWorkflow();
+      registry.registerWorkflows([workflow]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:order-processing:validate:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback("not valid json");
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
+
+    it("should drop message with missing requestId on failure channel", async () => {
+      const workflow = createTestWorkflow();
+      registry.registerWorkflows([workflow]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const failureCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:order-processing:validate:failed",
+      );
+      const failureCallback = failureCall![1] as (message: string) => void;
+
+      failureCallback(JSON.stringify({ payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
+  });
 });

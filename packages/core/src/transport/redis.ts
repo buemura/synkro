@@ -17,9 +17,9 @@ export class RedisManager implements TransportManager {
   private static readonly MAX_RECENT_MESSAGES = 10_000;
 
   constructor(redisUrl: string) {
-    this.publisher = new Redis(redisUrl);
-    this.subscriber = new Redis(redisUrl);
-    this.cacheClient = new Redis(redisUrl);
+    this.publisher = this.createClient(redisUrl, "publisher");
+    this.subscriber = this.createClient(redisUrl, "subscriber");
+    this.cacheClient = this.createClient(redisUrl, "cache");
 
     this.subscriber.on("message", (channel: string, message: string) => {
       const requestId = this.extractRequestId(message);
@@ -124,6 +124,29 @@ export class RedisManager implements TransportManager {
     await this.publisher.quit();
     await this.subscriber.quit();
     await this.cacheClient.quit();
+  }
+
+  private createClient(redisUrl: string, role: string): Redis {
+    const client = new Redis(redisUrl, {
+      retryStrategy(times) {
+        const delay = Math.min(times * 500, 5000);
+        logger.warn(
+          `[RedisManager] ${role} connection retry #${times} in ${delay}ms`,
+        );
+        return delay;
+      },
+      maxRetriesPerRequest: null,
+    });
+
+    client.on("error", (err: Error) => {
+      logger.error(`[RedisManager] ${role} connection error:`, err.message);
+    });
+
+    client.on("connect", () => {
+      logger.debug(`[RedisManager] ${role} connected`);
+    });
+
+    return client;
   }
 
   private static readonly REQUEST_ID_RE = /"requestId":"([^"]+)"/;

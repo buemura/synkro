@@ -155,9 +155,10 @@ export class WorkflowRegistry {
       this.redis.subscribeToChannel(
         `event:${channel}:completed`,
         (message: string) => {
-          const { requestId } = JSON.parse(message) as { requestId: string };
-          void this.withLock(`${requestId}:${workflow.name}`, () =>
-            this.handleStepCompletion(workflow, i, message),
+          const parsed = this.safeParse(message);
+          if (!parsed) return;
+          void this.withLock(`${parsed.requestId}:${workflow.name}`, () =>
+            this.handleStepCompletion(workflow, i, parsed.requestId, parsed.payload),
           );
         },
       );
@@ -165,9 +166,10 @@ export class WorkflowRegistry {
       this.redis.subscribeToChannel(
         `event:${channel}:failed`,
         (message: string) => {
-          const { requestId } = JSON.parse(message) as { requestId: string };
-          void this.withLock(`${requestId}:${workflow.name}`, () =>
-            this.handleStepFailure(workflow, i, message),
+          const parsed = this.safeParse(message);
+          if (!parsed) return;
+          void this.withLock(`${parsed.requestId}:${workflow.name}`, () =>
+            this.handleStepFailure(workflow, i, parsed.requestId, parsed.payload),
           );
         },
       );
@@ -177,13 +179,9 @@ export class WorkflowRegistry {
   private async handleStepCompletion(
     workflow: SynkroWorkflow,
     stepIndex: number,
-    message: string,
+    requestId: string,
+    payload: unknown,
   ): Promise<void> {
-    const { requestId, payload } = JSON.parse(message) as {
-      requestId: string;
-      payload: unknown;
-    };
-
     const lockKey = `${requestId}:${workflow.name}:completion:${stepIndex}`;
     await this.withStepTransitionClaim(lockKey, async () => {
       const state = await this.getState(requestId, workflow.name);
@@ -238,13 +236,9 @@ export class WorkflowRegistry {
   private async handleStepFailure(
     workflow: SynkroWorkflow,
     stepIndex: number,
-    message: string,
+    requestId: string,
+    payload: unknown,
   ): Promise<void> {
-    const { requestId, payload } = JSON.parse(message) as {
-      requestId: string;
-      payload: unknown;
-    };
-
     const lockKey = `${requestId}:${workflow.name}:failure:${stepIndex}`;
     await this.withStepTransitionClaim(lockKey, async () => {
       const state = await this.getState(requestId, workflow.name);
@@ -447,6 +441,27 @@ export class WorkflowRegistry {
 
   private dedupeKey(lockKey: string): string {
     return `synkro:dedupe:workflow:${lockKey}`;
+  }
+
+  private safeParse(message: string): { requestId: string; payload: unknown } | null {
+    let parsed: { requestId: string; payload: unknown };
+    try {
+      parsed = JSON.parse(message) as { requestId: string; payload: unknown };
+    } catch {
+      logger.error(
+        `[WorkflowRegistry] - Malformed message, dropping: ${message}`,
+      );
+      return null;
+    }
+
+    if (!parsed.requestId || typeof parsed.requestId !== "string") {
+      logger.error(
+        `[WorkflowRegistry] - Missing or invalid requestId, dropping message`,
+      );
+      return null;
+    }
+
+    return parsed;
   }
 
   private async saveState(

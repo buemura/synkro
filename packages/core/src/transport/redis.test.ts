@@ -7,6 +7,7 @@ const mockOn = vi.fn();
 const mockGet = vi.fn();
 const mockSet = vi.fn();
 const mockDel = vi.fn();
+const mockIncr = vi.fn().mockResolvedValue(1);
 const mockQuit = vi.fn().mockResolvedValue("OK");
 
 vi.mock("ioredis", () => {
@@ -17,6 +18,7 @@ vi.mock("ioredis", () => {
     get = mockGet;
     set = mockSet;
     del = mockDel;
+    incr = mockIncr;
     quit = mockQuit;
   }
   return { Redis: MockRedis };
@@ -236,6 +238,19 @@ describe("RedisManager", () => {
     it("should delete a cached value", async () => {
       await redis.deleteCache("key");
       expect(mockDel).toHaveBeenCalledWith("key");
+    });
+  });
+
+  describe("connection error handling", () => {
+    it("should register error and connect event handlers on all clients", () => {
+      const onCalls = mockOn.mock.calls;
+      const errorHandlers = onCalls.filter((call) => call[0] === "error");
+      const connectHandlers = onCalls.filter((call) => call[0] === "connect");
+
+      // 3 clients × 1 error handler each
+      expect(errorHandlers.length).toBe(3);
+      // 3 clients × 1 connect handler each
+      expect(connectHandlers.length).toBe(3);
     });
   });
 
