@@ -1,12 +1,8 @@
-import type {
-  HandlerCtx,
-  SchemaValidator,
-  SynkroEvent,
-  SynkroWorkflow,
-} from "@synkro/core";
+import type { HandlerCtx, SynkroEvent, SynkroWorkflow } from "@synkro/core";
 import { Synkro } from "@synkro/core";
 import { createDashboardHandler } from "@synkro/ui";
 import { createServer } from "node:http";
+import { z } from "zod";
 
 import { delay } from "./delay.js";
 import {
@@ -21,16 +17,23 @@ import {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// 1a. Global schemas — validated at publish time (throws on invalid payload)
+// 1a. Schemas — SchemaValidator is (payload: unknown) => void (throws on invalid)
+//     Works with Zod, Joi, or any validation library out of the box.
 // ---------------------------------------------------------------------------
 
-const schemas: Record<string, SchemaValidator> = {
-  InventoryLow: (payload) => {
-    if (!payload || typeof payload !== "object") throw new Error("payload must be an object");
-    const p = payload as Record<string, unknown>;
-    if (typeof p.sku !== "string") throw new Error("sku (string) is required");
-    if (typeof p.remaining !== "number") throw new Error("remaining (number) is required");
-  },
+const InventoryLowSchema = z.object({
+  sku: z.string(),
+  remaining: z.number(),
+});
+
+const AuditLogSchema = z.object({
+  action: z.string(),
+  userId: z.string(),
+});
+
+// Global schemas — validated at publish time (throws on invalid payload)
+const schemas = {
+  InventoryLow: (payload: unknown) => InventoryLowSchema.parse(payload),
 };
 
 const events: SynkroEvent[] = [
@@ -50,12 +53,7 @@ const events: SynkroEvent[] = [
   {
     // Per-event schema — validated at publish time and handler dispatch
     type: "AuditLog",
-    schema: (payload) => {
-      if (!payload || typeof payload !== "object") throw new Error("payload must be an object");
-      const p = payload as Record<string, unknown>;
-      if (typeof p.action !== "string") throw new Error("action (string) is required");
-      if (typeof p.userId !== "string") throw new Error("userId (string) is required");
-    },
+    schema: (payload: unknown) => AuditLogSchema.parse(payload),
     handler: async (ctx: HandlerCtx) => {
       const { action, userId } = ctx.payload as {
         action: string;

@@ -35,6 +35,7 @@ npm install @synkro/core
 
 ```ts
 import { Synkro } from "@synkro/core";
+import { z } from "zod"; // or any validation library
 
 const synkro = await Synkro.start({
   transport: "redis",
@@ -42,10 +43,7 @@ const synkro = await Synkro.start({
   drainTimeout: 5000, // graceful shutdown: wait up to 5s for active handlers
   schemas: {
     // global schema validation — throws at publish time
-    "UserSignedUp": (payload) => {
-      if (!payload || typeof payload !== "object" || !("email" in payload))
-        throw new Error("email is required");
-    },
+    "UserSignedUp": (payload) => z.object({ email: z.string() }).parse(payload),
   },
   events: [
     {

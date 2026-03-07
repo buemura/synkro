@@ -221,6 +221,55 @@ Configure retries per step. The handler will be retried up to `maxRetries` times
 }
 ```
 
+### Schema Validation
+
+Validate event payloads at publish time and handler dispatch. The `SchemaValidator` type is `(payload: unknown) => void` — just throw on invalid input. This works with **any validation library** (Zod, Joi, Valibot, etc.) or plain manual checks.
+
+**Global schemas** — validated at publish time (rejects before the message is sent):
+
+```ts
+import { z } from "zod";
+
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+  schemas: {
+    "UserSignedUp": (payload) => z.object({ email: z.string().email() }).parse(payload),
+    "OrderPlaced": (payload) => z.object({ orderId: z.string(), amount: z.number() }).parse(payload),
+  },
+  // ...
+});
+
+await synkro.publish("UserSignedUp", { email: "invalid" }); // throws ZodError
+```
+
+**Per-event schemas** — validated at both publish time and handler dispatch:
+
+```ts
+const synkro = await Synkro.start({
+  events: [
+    {
+      type: "AuditLog",
+      schema: (payload) => z.object({ action: z.string(), userId: z.string() }).parse(payload),
+      handler: async (ctx) => {
+        // payload is guaranteed valid here
+      },
+    },
+  ],
+});
+```
+
+**Manual validation** (no dependencies):
+
+```ts
+schemas: {
+  "UserSignedUp": (payload) => {
+    if (!payload || typeof payload !== "object" || !("email" in payload))
+      throw new Error("email is required");
+  },
+}
+```
+
 ## API
 
 ### `Synkro.start(options): Promise<Synkro>`

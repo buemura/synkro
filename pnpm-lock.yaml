@@ -16,6 +16,9 @@ importers:
       '@synkro/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^25.3.3
@@ -1488,6 +1491,9 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+
 snapshots:
 
   '@borewit/text-codec@0.2.1': {}
@@ -2779,3 +2785,5 @@ snapshots:
 
   wrappy@1.0.2:
     optional: true
+
+  zod@4.3.6: {}
