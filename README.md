@@ -11,6 +11,9 @@ Lightweight event-driven workflow orchestrator for Node.js. Define standalone ev
 - **Conditional Branching** — Route to different steps based on success or failure
 - **Workflow Chaining** — Trigger follow-up workflows on completion, success, or failure
 - **Retry Support** — Configurable retry logic per event or workflow step
+- **Schema Validation** — Validate payloads at publish time and handler dispatch with any validation library
+- **Workflow Timeout** — Step-level and workflow-level timeouts with automatic failure routing
+- **Graceful Shutdown** — Drain active handlers before disconnecting with configurable timeout
 - **Transport Options** — Redis for production, in-memory for development and testing
 - **Dashboard UI** — Built-in web dashboard to visualize events, workflows, and message metrics
 - **TypeScript** — Full type support out of the box
@@ -36,6 +39,14 @@ import { Synkro } from "@synkro/core";
 const synkro = await Synkro.start({
   transport: "redis",
   connectionUrl: "redis://localhost:6379",
+  drainTimeout: 5000, // graceful shutdown: wait up to 5s for active handlers
+  schemas: {
+    // global schema validation — throws at publish time
+    "UserSignedUp": (payload) => {
+      if (!payload || typeof payload !== "object" || !("email" in payload))
+        throw new Error("email is required");
+    },
+  },
   events: [
     {
       type: "UserSignedUp",
@@ -48,6 +59,7 @@ const synkro = await Synkro.start({
     {
       name: "ProcessOrder",
       onSuccess: "StartShipment",
+      timeoutMs: 30_000, // workflow-level timeout
       steps: [
         {
           type: "ValidateStock",
@@ -59,6 +71,7 @@ const synkro = await Synkro.start({
           type: "ProcessPayment",
           handler: paymentHandler,
           retry: { maxRetries: 3 },
+          timeoutMs: 10_000, // step-level timeout override
           onSuccess: "PaymentCompleted",
           onFailure: "PaymentFailed",
         },
@@ -72,6 +85,9 @@ const synkro = await Synkro.start({
 
 await synkro.publish("UserSignedUp", { email: "user@example.com" });
 await synkro.publish("ProcessOrder", { orderId: "abc-123", amount: 49.99 });
+
+// graceful shutdown — drains active handlers before disconnecting
+await synkro.stop();
 ```
 
 ## Dashboard

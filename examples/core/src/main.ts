@@ -1,4 +1,9 @@
-import type { HandlerCtx, SynkroEvent, SynkroWorkflow } from "@synkro/core";
+import type {
+  HandlerCtx,
+  SchemaValidator,
+  SynkroEvent,
+  SynkroWorkflow,
+} from "@synkro/core";
 import { Synkro } from "@synkro/core";
 import { createDashboardHandler } from "@synkro/ui";
 import { createServer } from "node:http";
@@ -15,6 +20,19 @@ import {
 // 1. Standalone events (inline handlers)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 1a. Global schemas — validated at publish time (throws on invalid payload)
+// ---------------------------------------------------------------------------
+
+const schemas: Record<string, SchemaValidator> = {
+  InventoryLow: (payload) => {
+    if (!payload || typeof payload !== "object") throw new Error("payload must be an object");
+    const p = payload as Record<string, unknown>;
+    if (typeof p.sku !== "string") throw new Error("sku (string) is required");
+    if (typeof p.remaining !== "number") throw new Error("remaining (number) is required");
+  },
+};
+
 const events: SynkroEvent[] = [
   {
     type: "InventoryLow",
@@ -30,7 +48,14 @@ const events: SynkroEvent[] = [
     },
   },
   {
+    // Per-event schema — validated at publish time and handler dispatch
     type: "AuditLog",
+    schema: (payload) => {
+      if (!payload || typeof payload !== "object") throw new Error("payload must be an object");
+      const p = payload as Record<string, unknown>;
+      if (typeof p.action !== "string") throw new Error("action (string) is required");
+      if (typeof p.userId !== "string") throw new Error("userId (string) is required");
+    },
     handler: async (ctx: HandlerCtx) => {
       const { action, userId } = ctx.payload as {
         action: string;
@@ -102,14 +127,17 @@ const workflows: SynkroWorkflow[] = [
     ],
   },
 
-  // Deployment workflow — step-level onSuccess/onFailure routing
+  // Deployment workflow — step-level onSuccess/onFailure routing + timeout
   // DeployToProduction and Rollback are auto-registered as implicit steps (FT-14)
+  // Workflow-level timeout: if any step exceeds 10s, it triggers the failure path
   {
     name: "DeployService",
+    timeoutMs: 10_000,
     steps: [
       { type: "BuildImage" },
       {
         type: "RunTests",
+        timeoutMs: 5_000, // step-level override: 5s timeout for tests
         onSuccess: "DeployToProduction",
         onFailure: "Rollback",
       },
@@ -156,6 +184,8 @@ async function main() {
     debug: false,
     events,
     workflows,
+    schemas, // global schema validation (v0.14.0)
+    drainTimeout: 3000, // graceful shutdown: wait up to 3s for active handlers (v0.14.0)
     handlers: [
       new NotificationHandlers(),
       new OrderWorkflowHandlers(),
@@ -274,6 +304,26 @@ async function main() {
 
     await delay(6000);
 
+    // --- Schema validation: publish with invalid payload ---
+
+    console.log("\n>> Schema validation demo\n");
+
+    try {
+      await synkro.publish("InventoryLow", { sku: "WIDGET-99" }); // missing 'remaining'
+    } catch (err) {
+      console.log(
+        `  [Schema] Global schema rejected InventoryLow: ${(err as Error).message}`,
+      );
+    }
+
+    try {
+      await synkro.publish("AuditLog", { action: "logout" }); // missing 'userId'
+    } catch (err) {
+      console.log(
+        `  [Schema] Per-event schema rejected AuditLog: ${(err as Error).message}`,
+      );
+    }
+
     console.log("\n--- Demo complete. ---\n");
   }
 
@@ -301,6 +351,15 @@ async function main() {
     console.log("\n--- Synkro Example ---");
     console.log("Dashboard:  http://localhost:4000/dashboard");
     console.log("Run demo:   curl -X POST http://localhost:4000/run\n");
+  });
+
+  // Graceful shutdown (v0.14.0) — drains active handlers before disconnecting
+  process.on("SIGINT", async () => {
+    console.log("\n[Shutdown] Draining active handlers...");
+    await synkro.stop();
+    console.log("[Shutdown] Clean shutdown complete.");
+    server.close();
+    process.exit(0);
   });
 
   // Run once on startup
