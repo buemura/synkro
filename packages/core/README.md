@@ -208,7 +208,13 @@ Configure retries per step. The handler will be retried up to `maxRetries` times
 {
   type: "ProcessPayment",
   handler: paymentHandler,
-  retry: { maxRetries: 3 },
+  retry: {
+    maxRetries: 3,
+    delayMs: 500,
+    backoff: "exponential",
+    jitter: true,
+    retryable: (err) => !(err instanceof ValidationError),
+  },
 }
 ```
 
@@ -220,8 +226,8 @@ Creates and returns a running instance.
 
 ```ts
 type SynkroOptions = {
-  transport: "redis" | "in-memory";
-  connectionUrl?: string; // required for external transports (e.g. Redis)
+  transport?: "redis" | "in-memory"; // defaults to "redis"
+  connectionUrl?: string; // required for Redis transport
   debug?: boolean;
   events?: SynkroEvent[];
   workflows?: SynkroWorkflow[];
@@ -282,6 +288,10 @@ Disconnects the transport and cleans up resources.
 ```ts
 type RetryConfig = {
   maxRetries: number;
+  delayMs?: number; // base delay in ms (default: 1000)
+  backoff?: "fixed" | "exponential"; // delay strategy (default: "fixed")
+  jitter?: boolean; // randomize delay ±50% (default: false)
+  retryable?: (error: unknown) => boolean; // skip retries for non-retryable errors
 };
 
 type SynkroEvent = {
