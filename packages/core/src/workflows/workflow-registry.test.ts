@@ -81,42 +81,81 @@ describe("WorkflowRegistry", () => {
       );
     });
 
-    it("should reject a workflow with dangling onSuccess target", () => {
-      expect(() =>
-        registry.registerWorkflows([
-          {
-            name: "dangling-workflow",
-            steps: [
-              {
-                type: "step1",
-                handler: vi.fn(),
-                onSuccess: "nonexistent",
-              },
-            ],
-          },
-        ]),
-      ).toThrow(
-        'step "step1" has onSuccess target "nonexistent" that does not match any step',
-      );
+    it("should auto-append implicit onSuccess target not in steps array", () => {
+      registry.registerWorkflows([
+        {
+          name: "implicit-workflow",
+          steps: [
+            {
+              type: "step1",
+              handler: vi.fn(),
+              onSuccess: "SuccessHandler",
+            },
+          ],
+        },
+      ]);
+
+      const workflows = registry.getRegisteredWorkflows();
+      const wf = workflows.find((w) => w.name === "implicit-workflow")!;
+      expect(wf.steps).toHaveLength(2);
+      expect(wf.steps[1]!.type).toBe("SuccessHandler");
     });
 
-    it("should reject a workflow with dangling onFailure target", () => {
-      expect(() =>
-        registry.registerWorkflows([
-          {
-            name: "dangling-workflow",
-            steps: [
-              {
-                type: "step1",
-                handler: vi.fn(),
-                onFailure: "nonexistent",
-              },
-            ],
-          },
-        ]),
-      ).toThrow(
-        'step "step1" has onFailure target "nonexistent" that does not match any step',
-      );
+    it("should auto-append implicit onFailure target not in steps array", () => {
+      registry.registerWorkflows([
+        {
+          name: "implicit-workflow",
+          steps: [
+            {
+              type: "step1",
+              handler: vi.fn(),
+              onFailure: "FailureHandler",
+            },
+          ],
+        },
+      ]);
+
+      const workflows = registry.getRegisteredWorkflows();
+      const wf = workflows.find((w) => w.name === "implicit-workflow")!;
+      expect(wf.steps).toHaveLength(2);
+      expect(wf.steps[1]!.type).toBe("FailureHandler");
+    });
+
+    it("should not duplicate step when target already exists in steps array", () => {
+      registry.registerWorkflows([
+        {
+          name: "explicit-workflow",
+          steps: [
+            {
+              type: "step1",
+              handler: vi.fn(),
+              onFailure: "step2",
+            },
+            { type: "step2", handler: vi.fn() },
+          ],
+        },
+      ]);
+
+      const workflows = registry.getRegisteredWorkflows();
+      const wf = workflows.find((w) => w.name === "explicit-workflow")!;
+      expect(wf.steps).toHaveLength(2);
+    });
+
+    it("should add branch target only once when referenced by multiple steps", () => {
+      registry.registerWorkflows([
+        {
+          name: "multi-ref-workflow",
+          steps: [
+            { type: "step1", handler: vi.fn(), onFailure: "ErrorHandler" },
+            { type: "step2", handler: vi.fn(), onFailure: "ErrorHandler" },
+          ],
+        },
+      ]);
+
+      const workflows = registry.getRegisteredWorkflows();
+      const wf = workflows.find((w) => w.name === "multi-ref-workflow")!;
+      expect(wf.steps).toHaveLength(3);
+      expect(wf.steps.filter((s) => s.type === "ErrorHandler")).toHaveLength(1);
     });
 
     it("should accept a valid workflow with onSuccess/onFailure targets", () => {
@@ -642,6 +681,111 @@ describe("WorkflowRegistry", () => {
           status: "running",
         }),
         86400,
+      );
+    });
+
+    it("should subscribe to channels for implicit branch target steps", () => {
+      registry.registerWorkflows([
+        {
+          name: "implicit-routing",
+          steps: [
+            {
+              type: "RunTask",
+              handler: vi.fn(),
+              onSuccess: "TaskSucceeded",
+              onFailure: "TaskFailed",
+            },
+          ],
+        },
+      ]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const channels = subscribeCalls.map((call) => call[0]);
+
+      expect(channels).toContain("event:workflow:implicit-routing:TaskSucceeded:completed");
+      expect(channels).toContain("event:workflow:implicit-routing:TaskSucceeded:failed");
+      expect(channels).toContain("event:workflow:implicit-routing:TaskFailed:completed");
+      expect(channels).toContain("event:workflow:implicit-routing:TaskFailed:failed");
+    });
+
+    it("should route to implicit onFailure step correctly", async () => {
+      registry.registerWorkflows([
+        {
+          name: "implicit-fail-routing",
+          steps: [
+            {
+              type: "Process",
+              handler: vi.fn(),
+              onFailure: "HandleError",
+            },
+            { type: "NextStep", handler: vi.fn() },
+          ],
+        },
+      ]);
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "implicit-fail-routing",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const failureCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:implicit-fail-routing:Process:failed",
+      );
+      const failureCallback = failureCall![1] as (message: string) => void;
+
+      failureCallback(
+        JSON.stringify({ requestId: "req-1", payload: { data: "test" } }),
+      );
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:implicit-fail-routing:HandleError",
+        JSON.stringify({ requestId: "req-1", payload: { data: "test" } }),
+      );
+    });
+
+    it("should skip implicit branch targets in sequential advancement", async () => {
+      registry.registerWorkflows([
+        {
+          name: "implicit-skip",
+          steps: [
+            {
+              type: "Step1",
+              handler: vi.fn(),
+              onFailure: "ErrorHandler",
+            },
+            { type: "Step2", handler: vi.fn() },
+          ],
+        },
+      ]);
+
+      // Step1 completes successfully — should skip ErrorHandler (implicit, appended at end) and go to Step2
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "implicit-skip",
+          currentStep: 0,
+          status: "running",
+        }),
+      );
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionCall = subscribeCalls.find(
+        (call) => call[0] === "event:workflow:implicit-skip:Step1:completed",
+      );
+      const completionCallback = completionCall![1] as (message: string) => void;
+
+      completionCallback(
+        JSON.stringify({ requestId: "req-1", payload: {} }),
+      );
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:implicit-skip:Step2",
+        JSON.stringify({ requestId: "req-1", payload: {} }),
       );
     });
 

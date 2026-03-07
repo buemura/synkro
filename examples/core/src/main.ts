@@ -1,7 +1,7 @@
-import { createServer } from "node:http";
-import { Synkro } from "@synkro/core";
 import type { HandlerCtx, SynkroEvent, SynkroWorkflow } from "@synkro/core";
+import { Synkro } from "@synkro/core";
 import { createDashboardHandler } from "@synkro/ui";
+import { createServer } from "node:http";
 
 import { delay } from "./delay.js";
 import {
@@ -37,7 +37,9 @@ const events: SynkroEvent[] = [
         userId: string;
       };
       await delay(1000);
-      console.log(`  [Audit] (${ctx.requestId}) User ${userId} performed "${action}"`);
+      console.log(
+        `  [Audit] (${ctx.requestId}) User ${userId} performed "${action}"`,
+      );
     },
   },
 ];
@@ -48,6 +50,7 @@ const events: SynkroEvent[] = [
 
 const workflows: SynkroWorkflow[] = [
   // Simple linear workflow
+  // HandlePaymentFailure is auto-registered as an implicit step (FT-14)
   {
     name: "OrderProcessing",
     steps: [
@@ -58,7 +61,6 @@ const workflows: SynkroWorkflow[] = [
         onFailure: "HandlePaymentFailure",
       },
       { type: "FulfillOrder" },
-      { type: "HandlePaymentFailure" },
     ],
   },
 
@@ -71,7 +73,9 @@ const workflows: SynkroWorkflow[] = [
         handler: async (ctx: HandlerCtx) => {
           const { email } = ctx.payload as { email: string };
           await delay(1000);
-          console.log(`  [Onboarding] (${ctx.requestId}) Creating account for ${email}`);
+          console.log(
+            `  [Onboarding] (${ctx.requestId}) Creating account for ${email}`,
+          );
           ctx.setPayload({ accountId: "acc_" + Date.now() });
         },
       },
@@ -79,7 +83,9 @@ const workflows: SynkroWorkflow[] = [
         type: "SetupPreferences",
         handler: async (ctx: HandlerCtx) => {
           await delay(1000);
-          console.log(`  [Onboarding] (${ctx.requestId}) Setting default preferences`);
+          console.log(
+            `  [Onboarding] (${ctx.requestId}) Setting default preferences`,
+          );
         },
       },
       {
@@ -87,7 +93,9 @@ const workflows: SynkroWorkflow[] = [
         handler: async (ctx: HandlerCtx) => {
           const { email } = ctx.payload as { email: string };
           await delay(1000);
-          console.log(`  [Onboarding] (${ctx.requestId}) Sending onboarding guide to ${email}`);
+          console.log(
+            `  [Onboarding] (${ctx.requestId}) Sending onboarding guide to ${email}`,
+          );
           await ctx.publish("OnboardingComplete", ctx.payload, ctx.requestId);
         },
       },
@@ -95,7 +103,7 @@ const workflows: SynkroWorkflow[] = [
   },
 
   // Deployment workflow — step-level onSuccess/onFailure routing
-  // RunTests routes to DeployToProduction on success, or Rollback on failure
+  // DeployToProduction and Rollback are auto-registered as implicit steps (FT-14)
   {
     name: "DeployService",
     steps: [
@@ -105,8 +113,6 @@ const workflows: SynkroWorkflow[] = [
         onSuccess: "DeployToProduction",
         onFailure: "Rollback",
       },
-      { type: "DeployToProduction" },
-      { type: "Rollback" },
     ],
   },
 
@@ -119,9 +125,9 @@ const workflows: SynkroWorkflow[] = [
       { type: "TransformData" },
       { type: "LoadData" },
     ],
-    onSuccess: "PipelineNotify",    // chained: runs only on success
-    onFailure: "PipelineRecovery",  // chained: runs only on failure
-    onComplete: "PipelineCleanup",  // chained: always runs
+    onSuccess: "PipelineNotify", // chained: runs only on success
+    onFailure: "PipelineRecovery", // chained: runs only on failure
+    onComplete: "PipelineCleanup", // chained: always runs
   },
 
   // Chained workflows (triggered by DataPipeline)
@@ -145,7 +151,8 @@ const workflows: SynkroWorkflow[] = [
 
 async function main() {
   const synkro = await Synkro.start({
-    transport: "in-memory",
+    transport: "redis",
+    connectionUrl: "redis://localhost:6379",
     debug: false,
     events,
     workflows,
@@ -211,7 +218,9 @@ async function main() {
     // --- DeployService: step-level onSuccess/onFailure routing ---
 
     console.log("\n>> Starting DeployService workflow (success path)\n");
-    console.log("   BuildImage -> RunTests -> [onSuccess] -> DeployToProduction\n");
+    console.log(
+      "   BuildImage -> RunTests -> [onSuccess] -> DeployToProduction\n",
+    );
 
     await synkro.publish("DeployService", {
       service: "api-gateway",
@@ -235,7 +244,9 @@ async function main() {
 
     console.log("\n>> Starting DataPipeline workflow (success path)\n");
     console.log("   Extract -> Transform -> Load");
-    console.log("   then: PipelineNotify (onSuccess) + PipelineCleanup (onComplete)\n");
+    console.log(
+      "   then: PipelineNotify (onSuccess) + PipelineCleanup (onComplete)\n",
+    );
 
     await synkro.publish("DataPipeline", {
       source: "analytics-db",
@@ -246,7 +257,9 @@ async function main() {
 
     console.log("\n>> Starting DataPipeline workflow (failure path)\n");
     console.log("   Extract -> Transform (fails!)");
-    console.log("   then: PipelineRecovery (onFailure) + PipelineCleanup (onComplete)\n");
+    console.log(
+      "   then: PipelineRecovery (onFailure) + PipelineCleanup (onComplete)\n",
+    );
 
     await synkro.publish("DataPipeline", {
       source: "legacy-system",

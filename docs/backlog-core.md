@@ -87,9 +87,9 @@ Removed the unused `eventToWorkflows` map declaration and population code from `
 ### IMP-05: Structured logging
 Logger only supports `console.log`/`warn`/`error` with unstructured args. Should support structured JSON output with fields like `requestId`, `eventType`, `workflowName` for production observability.
 
-### IMP-08: Metrics/state retention controls
-**File:** `packages/core/src/handlers/handler-registry.ts`
-Event metrics keys (`synkro:metrics:...`) are monotonic with no TTL/reset policy, leading to unbounded key growth. Should add optional metrics TTL/reset hooks and retention config.
+### IMP-08: Configurable key retention / TTL policy
+**Files:** `packages/core/src/handlers/handler-registry.ts`, `packages/core/src/workflows/workflow-registry.ts`, `packages/core/src/types.ts`
+Every workflow run and event execution creates Redis keys (dedup, state, metrics) that accumulate over time. Metrics keys (`synkro:metrics:*`) have no TTL at all. Dedup keys (`synkro:dedupe:*`) and workflow state keys (`workflow:state:*`) use hardcoded 24h TTLs. For high-throughput systems this leads to significant Redis memory/disk growth. Should expose a `retention` config in `SynkroOptions` allowing users to set default TTLs per key category (e.g., `dedupTtl`, `stateTtl`, `metricsTtl`) or disable persistence for categories they don't need. Consider also a global `defaultTtl` fallback. This subsumes the workflow state TTL concern in TD-07.
 
 ### IMP-09: Test coverage for transports
 No dedicated test file for `in-memory.ts`. Most behavior tests use Redis mocks; in-memory transport parity is not verified. Should add shared transport contract tests executed against both implementations, covering TTL behavior, concurrent subscriptions, and edge cases.
@@ -104,9 +104,8 @@ No way to cancel a running workflow. Should support `synkro.cancelWorkflow(reque
 ### FT-09: Event filtering / conditional handlers
 Allow handlers to specify a filter predicate so they only execute when the payload matches certain conditions, reducing unnecessary handler invocations.
 
-### FT-14: Implicit step registration for onSuccess/onFailure targets
-**Starting points:** `packages/core/src/workflows/workflow-registry.ts`, `packages/core/src/types.ts`
-Steps referenced in `onSuccess` or `onFailure` should not need to be repeated in the `steps` array. Currently, if `ProcessPayment` has `onFailure: "HandlePaymentFailure"`, the user must also add `{ type: "HandlePaymentFailure" }` to the steps list. The workflow engine should automatically recognize branch targets without requiring explicit step entries, reducing duplication and potential misconfiguration.
+### ~~FT-14: Implicit step registration for onSuccess/onFailure targets~~ ✅ Resolved in v0.12.0
+Steps referenced in `onSuccess` or `onFailure` are now automatically appended as implicit steps during workflow normalization. Explicit declaration in the `steps` array is no longer required, eliminating duplication while remaining fully backward compatible.
 
 ### FT-12: Event versioning
 No event versioning support. When event payload schemas evolve, there's no way to handle v1 vs v2 of the same event. Support event type versioning (e.g., `user:created:v2`).

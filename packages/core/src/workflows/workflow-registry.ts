@@ -61,7 +61,8 @@ export class WorkflowRegistry {
   }
 
   registerWorkflows(workflows: SynkroWorkflow[]): void {
-    for (const workflow of workflows) {
+    for (const wf of workflows) {
+      const workflow = this.normalizeWorkflow(wf);
       this.validateWorkflow(workflow);
       this.workflows.set(workflow.name, workflow);
 
@@ -338,6 +339,25 @@ export class WorkflowRegistry {
     return `workflow:${workflowName}:${stepType}`;
   }
 
+  private normalizeWorkflow(workflow: SynkroWorkflow): SynkroWorkflow {
+    const explicitTypes = new Set(workflow.steps.map((s) => s.type));
+    const implicitSteps: SynkroWorkflow["steps"] = [];
+    const added = new Set<string>();
+
+    for (const step of workflow.steps) {
+      for (const target of [step.onSuccess, step.onFailure]) {
+        if (target && !explicitTypes.has(target) && !added.has(target)) {
+          implicitSteps.push({ type: target });
+          added.add(target);
+        }
+      }
+    }
+
+    if (implicitSteps.length === 0) return workflow;
+
+    return { ...workflow, steps: [...workflow.steps, ...implicitSteps] };
+  }
+
   private validateWorkflow(workflow: SynkroWorkflow): void {
     if (!workflow.name) {
       throw new Error("[WorkflowRegistry] - Workflow name must not be empty");
@@ -357,19 +377,6 @@ export class WorkflowRegistry {
         );
       }
       stepTypes.add(step.type);
-    }
-
-    for (const step of workflow.steps) {
-      if (step.onSuccess && !stepTypes.has(step.onSuccess)) {
-        throw new Error(
-          `[WorkflowRegistry] - Workflow "${workflow.name}" step "${step.type}" has onSuccess target "${step.onSuccess}" that does not match any step`,
-        );
-      }
-      if (step.onFailure && !stepTypes.has(step.onFailure)) {
-        throw new Error(
-          `[WorkflowRegistry] - Workflow "${workflow.name}" step "${step.type}" has onFailure target "${step.onFailure}" that does not match any step`,
-        );
-      }
     }
   }
 
