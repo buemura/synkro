@@ -1,25 +1,18 @@
 {
-  "name": "example",
+  "name": "@synkro/example-core",
   "version": "1.0.0",
-  "description": "",
-  "license": "ISC",
-  "author": "",
-  "type": "commonjs",
-  "main": "index.js",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsx watch src/index.ts"
-  },
-  "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^25.3.3",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "start": "tsx src/main.ts"
   },
   "dependencies": {
     "@synkro/core": "workspace:*",
-    "@synkro/ui": "workspace:*",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1"
+    "@synkro/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

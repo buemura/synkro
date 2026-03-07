@@ -104,6 +104,10 @@ No way to cancel a running workflow. Should support `synkro.cancelWorkflow(reque
 ### FT-09: Event filtering / conditional handlers
 Allow handlers to specify a filter predicate so they only execute when the payload matches certain conditions, reducing unnecessary handler invocations.
 
+### FT-14: Implicit step registration for onSuccess/onFailure targets
+**Starting points:** `packages/core/src/workflows/workflow-registry.ts`, `packages/core/src/types.ts`
+Steps referenced in `onSuccess` or `onFailure` should not need to be repeated in the `steps` array. Currently, if `ProcessPayment` has `onFailure: "HandlePaymentFailure"`, the user must also add `{ type: "HandlePaymentFailure" }` to the steps list. The workflow engine should automatically recognize branch targets without requiring explicit step entries, reducing duplication and potential misconfiguration.
+
 ### FT-12: Event versioning
 No event versioning support. When event payload schemas evolve, there's no way to handle v1 vs v2 of the same event. Support event type versioning (e.g., `user:created:v2`).
 
