@@ -40,10 +40,7 @@ const events: SynkroEvent[] = [
   {
     type: "InventoryLow",
     handler: async (ctx: HandlerCtx) => {
-      const { sku, remaining } = ctx.payload as {
-        sku: string;
-        remaining: number;
-      };
+      const { sku, remaining } = ctx.payload as { sku: string; remaining: number };
       await delay(500);
       console.log(
         `  [Inventory] (${ctx.requestId}) SKU ${sku} is low (${remaining} left), reordering...`,
@@ -55,10 +52,7 @@ const events: SynkroEvent[] = [
     type: "AuditLog",
     schema: (payload: unknown) => AuditLogSchema.parse(payload),
     handler: async (ctx: HandlerCtx) => {
-      const { action, userId } = ctx.payload as {
-        action: string;
-        userId: string;
-      };
+      const { action, userId } = ctx.payload as { action: string; userId: string };
       await delay(500);
       console.log(
         `  [Audit] (${ctx.requestId}) User ${userId} performed "${action}"`,
