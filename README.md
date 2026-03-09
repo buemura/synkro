@@ -1,7 +1,8 @@
 <p align="center">
-  <img src="./assets/logo.svg" alt="Synkro" width="400" />
+  <img src="./assets/mascot.svg" alt="Synkro" width="400" />
 </p>
 
+<h1 align="center">Synkro</h1>
 <p align="center">
   <strong>Lightweight event-driven workflow orchestrator for Node.js</strong>
 </p>
