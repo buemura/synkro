@@ -6,6 +6,13 @@ vi.mock("@synkro/core", () => {
   const mockInstance = {
     publish: vi.fn().mockResolvedValue("req-123"),
     on: vi.fn(),
+    off: vi.fn(),
+    getWorkflowState: vi.fn().mockResolvedValue({
+      workflowName: "test-workflow",
+      currentStep: 1,
+      status: "running",
+    }),
+    cancelWorkflow: vi.fn().mockResolvedValue(true),
     introspect: vi.fn().mockReturnValue({ events: [], workflows: [] }),
     getEventMetrics: vi.fn().mockResolvedValue({
       type: "test",
@@ -37,6 +44,9 @@ describe("createSynkro", () => {
     expect(client).toBeDefined();
     expect(client.publish).toBeTypeOf("function");
     expect(client.on).toBeTypeOf("function");
+    expect(client.off).toBeTypeOf("function");
+    expect(client.getWorkflowState).toBeTypeOf("function");
+    expect(client.cancelWorkflow).toBeTypeOf("function");
     expect(client.introspect).toBeTypeOf("function");
     expect(client.getEventMetrics).toBeTypeOf("function");
     expect(client.getInstance).toBeTypeOf("function");
@@ -74,5 +84,36 @@ describe("createSynkro", () => {
     await client.stop();
 
     expect((globalThis as Record<string, unknown>)[GLOBAL_KEY]).toBeUndefined();
+  });
+
+  it("should delegate off() to the instance", async () => {
+    const { Synkro } = await import("@synkro/core");
+    const client = createSynkro({ transport: "in-memory" });
+    const handler = vi.fn();
+
+    await client.off("test-event", handler);
+
+    const instance = await Synkro.start.mock.results[0]!.value;
+    expect(instance.off).toHaveBeenCalledWith("test-event", handler);
+  });
+
+  it("should delegate getWorkflowState() to the instance", async () => {
+    const client = createSynkro({ transport: "in-memory" });
+
+    const state = await client.getWorkflowState("req-1", "test-workflow");
+
+    expect(state).toEqual({
+      workflowName: "test-workflow",
+      currentStep: 1,
+      status: "running",
+    });
+  });
+
+  it("should delegate cancelWorkflow() to the instance", async () => {
+    const client = createSynkro({ transport: "in-memory" });
+
+    const result = await client.cancelWorkflow("req-1", "test-workflow");
+
+    expect(result).toBe(true);
   });
 });

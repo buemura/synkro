@@ -4,6 +4,7 @@ import type {
   HandlerFunction,
   RetryConfig,
   SynkroIntrospection,
+  WorkflowState,
 } from "@synkro/core";
 
 import type { SynkroNextOptions } from "./types.js";
@@ -13,6 +14,9 @@ const GLOBAL_KEY = "__synkro_instance__";
 export type SynkroClient = {
   publish(event: string, payload?: unknown, requestId?: string): Promise<string>;
   on(eventType: string, handler: HandlerFunction, retry?: RetryConfig): void;
+  off(eventType: string, handler?: HandlerFunction): void;
+  getWorkflowState(requestId: string, workflowName: string): Promise<WorkflowState | null>;
+  cancelWorkflow(requestId: string, workflowName: string): Promise<boolean>;
   introspect(): Promise<SynkroIntrospection>;
   getEventMetrics(eventType: string): Promise<EventMetrics>;
   getInstance(): Promise<Synkro>;
@@ -49,6 +53,21 @@ export function createSynkro(options: SynkroNextOptions): SynkroClient {
     async on(eventType, handler, retry) {
       const synkro = await getOrCreateInstance();
       synkro.on(eventType, handler, retry);
+    },
+
+    async off(eventType, handler) {
+      const synkro = await getOrCreateInstance();
+      synkro.off(eventType, handler);
+    },
+
+    async getWorkflowState(requestId, workflowName) {
+      const synkro = await getOrCreateInstance();
+      return synkro.getWorkflowState(requestId, workflowName);
+    },
+
+    async cancelWorkflow(requestId, workflowName) {
+      const synkro = await getOrCreateInstance();
+      return synkro.cancelWorkflow(requestId, workflowName);
     },
 
     async introspect() {
