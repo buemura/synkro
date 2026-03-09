@@ -13,6 +13,10 @@ Lightweight workflow and state machine orchestrator. Define event-driven workflo
 - **Schema Validation** — Optional payload validation at publish and handler dispatch time
 - **Workflow Timeout** — Configurable timeouts per step or per workflow
 - **Graceful Shutdown** — Drains active handlers before disconnecting
+- **Workflow State Query** — Inspect running workflow state at any time
+- **Workflow Cancellation** — Cancel running workflows programmatically
+- **Handler Unsubscribe** — Remove event handlers at runtime with `off()`
+- **Typed Payloads** — Generic `HandlerCtx<T>` for compile-time payload safety
 - **Simple API** — Single `Synkro` class with minimal configuration
 - **TypeScript** — Full type support out of the box
 
@@ -335,6 +339,38 @@ synkro.on("ValidateStock", async (ctx) => {
 });
 ```
 
+### `synkro.off(eventType, handler?): void`
+
+Removes an event handler at runtime. If `handler` is provided, only that specific handler is removed (by reference). If omitted, all handlers for the event type are removed.
+
+```ts
+const handler = (ctx) => console.log(ctx.payload);
+synkro.on("StockUpdate", handler);
+
+// Later: remove this specific handler
+synkro.off("StockUpdate", handler);
+
+// Or remove all handlers for the event type
+synkro.off("StockUpdate");
+```
+
+### `synkro.getWorkflowState(requestId, workflowName): Promise<WorkflowState | null>`
+
+Returns the current state of a workflow instance, or `null` if no state exists.
+
+```ts
+const state = await synkro.getWorkflowState(requestId, "ProcessOrder");
+// { workflowName: "ProcessOrder", currentStep: 2, status: "running" }
+```
+
+### `synkro.cancelWorkflow(requestId, workflowName): Promise<boolean>`
+
+Cancels a running workflow. Returns `true` if the workflow was cancelled, `false` if it was not in a cancellable state. Cancelled workflows will not advance to subsequent steps.
+
+```ts
+const cancelled = await synkro.cancelWorkflow(requestId, "ProcessOrder");
+```
+
 ### `synkro.stop(): Promise<void>`
 
 Gracefully shuts down. Waits for in-flight handlers to complete (up to `drainTimeout`), then disconnects the transport.
@@ -352,9 +388,9 @@ type RetryConfig = {
 
 type SchemaValidator = (payload: unknown) => void; // throws on invalid
 
-type SynkroEvent = {
+type SynkroEvent<T = unknown> = {
   type: string;
-  handler: HandlerFunction;
+  handler: HandlerFunction<T>;
   retry?: RetryConfig;
   schema?: SchemaValidator;
 };
@@ -377,9 +413,9 @@ type SynkroWorkflowStep = {
   timeoutMs?: number; // overrides workflow-level timeout
 };
 
-type HandlerCtx = {
+type HandlerCtx<T = unknown> = {
   requestId: string;
-  payload: unknown;
+  payload: T;
   publish: PublishFunction;
   setPayload: (data: Record<string, unknown>) => void;
 };
@@ -390,7 +426,13 @@ type PublishFunction = (
   requestId?: string,
 ) => Promise<string>;
 
-type HandlerFunction = (ctx: HandlerCtx) => void | Promise<void>;
+type HandlerFunction<T = unknown> = (ctx: HandlerCtx<T>) => void | Promise<void>;
+
+type WorkflowState = {
+  workflowName: string;
+  currentStep: number;
+  status: "running" | "completed" | "failed" | "cancelled";
+};
 ```
 
 ## License

@@ -4,10 +4,10 @@ import type { HandlerRegistry } from "../handlers/handler-registry.js";
 import type { TransportManager } from "../transport/transport.js";
 import type { HandlerFunction, RetentionConfig, SynkroWorkflow, WorkflowInfo } from "../types.js";
 
-type WorkflowState = {
+export type WorkflowState = {
   workflowName: string;
   currentStep: number;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled";
 };
 
 const DEFAULT_LOCK_TTL = 300;
@@ -555,5 +555,30 @@ export class WorkflowRegistry {
     const raw = await this.redis.getCache(this.stateKey(requestId, workflowName));
     if (!raw) return null;
     return JSON.parse(raw) as WorkflowState;
+  }
+
+  async queryState(requestId: string, workflowName: string): Promise<WorkflowState | null> {
+    return this.getState(requestId, workflowName);
+  }
+
+  async cancelWorkflow(requestId: string, workflowName: string): Promise<boolean> {
+    const state = await this.getState(requestId, workflowName);
+    if (!state || state.status !== "running") {
+      return false;
+    }
+
+    const workflow = this.workflows.get(workflowName);
+    if (workflow) {
+      this.clearAllTimers(requestId, workflowName, workflow.steps.length);
+    }
+
+    state.status = "cancelled";
+    await this.saveState(requestId, state);
+
+    this.logger.debug(
+      `[WorkflowRegistry] - Workflow "${workflowName}" cancelled (requestId: ${requestId})`,
+    );
+
+    return true;
   }
 }

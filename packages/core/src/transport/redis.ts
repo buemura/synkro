@@ -85,6 +85,13 @@ export class RedisManager implements TransportManager {
       });
   }
 
+  unsubscribeFromChannel(channel: string): void {
+    this.channelCallbacks.delete(channel);
+    this.subscriber.unsubscribe(channel).catch((err: unknown) => {
+      logger.error(`[RedisManager] Failed to unsubscribe from "${channel}":`, err);
+    });
+  }
+
   async getCache(key: string): Promise<string | null> {
     return await this.cacheClient.get(key);
   }

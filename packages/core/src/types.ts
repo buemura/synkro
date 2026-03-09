@@ -10,9 +10,9 @@ export type RetryConfig = {
   retryable?: (error: unknown) => boolean;
 };
 
-export type SynkroEvent = {
+export type SynkroEvent<T = unknown> = {
   type: string;
-  handler: HandlerFunction;
+  handler: HandlerFunction<T>;
   retry?: RetryConfig;
   schema?: SchemaValidator;
 };
@@ -60,14 +60,14 @@ export type PublishFunction = (
   requestId?: string,
 ) => Promise<string>;
 
-export type HandlerCtx = {
+export type HandlerCtx<T = unknown> = {
   requestId: string;
-  payload: unknown;
+  payload: T;
   publish: PublishFunction;
   setPayload: (data: Record<string, unknown>) => void;
 };
 
-export type HandlerFunction = (ctx: HandlerCtx) => void | Promise<void>;
+export type HandlerFunction<T = unknown> = (ctx: HandlerCtx<T>) => void | Promise<void>;
 
 export type EventInfo = {
   type: string;

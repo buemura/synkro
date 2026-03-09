@@ -20,6 +20,7 @@ import type {
   SynkroWorkflow,
 } from "./types.js";
 import type { TransportManager } from "./transport/index.js";
+import type { WorkflowState } from "./workflows/workflow-registry.js";
 
 const DEFAULT_DRAIN_TIMEOUT = 5000;
 const DRAIN_POLL_INTERVAL = 50;
@@ -108,6 +109,10 @@ export class Synkro {
     this.handlerRegistry.register(eventType, handler, retry, schema);
   }
 
+  off(eventType: string, handler?: HandlerFunction): void {
+    this.handlerRegistry.unregister(eventType, handler);
+  }
+
   async publish(
     event: string,
     payload?: unknown,
@@ -130,6 +135,14 @@ export class Synkro {
       JSON.stringify({ requestId, payload }),
     );
     return requestId;
+  }
+
+  async getWorkflowState(requestId: string, workflowName: string): Promise<WorkflowState | null> {
+    return this.workflowRegistry.queryState(requestId, workflowName);
+  }
+
+  async cancelWorkflow(requestId: string, workflowName: string): Promise<boolean> {
+    return this.workflowRegistry.cancelWorkflow(requestId, workflowName);
   }
 
   async getEventMetrics(eventType: string): Promise<EventMetrics> {

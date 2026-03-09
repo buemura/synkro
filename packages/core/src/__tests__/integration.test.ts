@@ -413,6 +413,153 @@ describe("Integration", () => {
     });
   });
 
+  // ───────────────────────────── Off / Unsubscribe ─────────────────────────────
+
+  describe("off()", () => {
+    it("should stop delivering events after off() with specific handler", async () => {
+      const received: unknown[] = [];
+      const handler = (ctx: HandlerCtx) => {
+        received.push(ctx.payload);
+      };
+
+      synkro = await startInMemory({});
+      synkro.on("test:off", handler);
+
+      await synkro.publish("test:off", { n: 1 });
+      await settle();
+      expect(received).toHaveLength(1);
+
+      synkro.off("test:off", handler);
+
+      await synkro.publish("test:off", { n: 2 });
+      await settle();
+      expect(received).toHaveLength(1);
+    });
+
+    it("should stop delivering all events after off() with no handler", async () => {
+      const calls: string[] = [];
+
+      synkro = await startInMemory({
+        events: [
+          { type: "test:off-all", handler: () => { calls.push("a"); } },
+          { type: "test:off-all", handler: () => { calls.push("b"); } },
+        ],
+      });
+
+      await synkro.publish("test:off-all");
+      await settle();
+      expect(calls).toHaveLength(2);
+
+      synkro.off("test:off-all");
+
+      await synkro.publish("test:off-all");
+      await settle();
+      expect(calls).toHaveLength(2);
+    });
+  });
+
+  // ───────────────────────────── Workflow State Query ─────────────────────────────
+
+  describe("workflow state query", () => {
+    it("should return completed state after workflow finishes", async () => {
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "query-wf",
+            steps: [{ type: "Step1", handler: () => {} }],
+          },
+        ],
+      });
+
+      const requestId = await synkro.publish("query-wf", {});
+      await settle();
+
+      const state = await synkro.getWorkflowState(requestId, "query-wf");
+      expect(state).not.toBeNull();
+      expect(state!.status).toBe("completed");
+      expect(state!.workflowName).toBe("query-wf");
+    });
+
+    it("should return null for unknown workflow", async () => {
+      synkro = await startInMemory({});
+      const state = await synkro.getWorkflowState("unknown-id", "unknown-wf");
+      expect(state).toBeNull();
+    });
+  });
+
+  // ───────────────────────────── Workflow Cancellation ─────────────────────────────
+
+  describe("workflow cancellation", () => {
+    it("should stop workflow progression when cancelled mid-execution", async () => {
+      const order: string[] = [];
+      let step1Resolve: () => void;
+      const step1Started = new Promise<void>((resolve) => {
+        step1Resolve = resolve;
+      });
+
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "cancel-wf",
+            steps: [
+              {
+                type: "Slow",
+                handler: async () => {
+                  order.push("Slow");
+                  step1Resolve();
+                  await new Promise((r) => setTimeout(r, 50));
+                },
+              },
+              {
+                type: "Fast",
+                handler: () => {
+                  order.push("Fast");
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      const requestId = await synkro.publish("cancel-wf", {});
+      await step1Started;
+
+      const cancelled = await synkro.cancelWorkflow(requestId, "cancel-wf");
+      expect(cancelled).toBe(true);
+
+      await settle();
+
+      expect(order).toEqual(["Slow"]);
+      expect(order).not.toContain("Fast");
+
+      const state = await synkro.getWorkflowState(requestId, "cancel-wf");
+      expect(state!.status).toBe("cancelled");
+    });
+
+    it("should return false when cancelling a completed workflow", async () => {
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "done-wf",
+            steps: [{ type: "Step1", handler: () => {} }],
+          },
+        ],
+      });
+
+      const requestId = await synkro.publish("done-wf", {});
+      await settle();
+
+      const cancelled = await synkro.cancelWorkflow(requestId, "done-wf");
+      expect(cancelled).toBe(false);
+    });
+
+    it("should return false for unknown requestId", async () => {
+      synkro = await startInMemory({});
+      const cancelled = await synkro.cancelWorkflow("unknown", "unknown");
+      expect(cancelled).toBe(false);
+    });
+  });
+
   // ───────────────────────────── Decorator-Based Handlers ─────────────────────────────
 
   describe("decorator-based handlers", () => {

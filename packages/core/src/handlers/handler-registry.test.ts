@@ -10,6 +10,7 @@ function createMockRedis(): RedisManager {
   return {
     publishMessage: vi.fn().mockResolvedValue(undefined),
     subscribeToChannel: vi.fn(),
+    unsubscribeFromChannel: vi.fn(),
     getCache: vi.fn(),
     setCacheIfNotExists: vi.fn().mockResolvedValue(true),
     setCache: vi.fn().mockResolvedValue(undefined),
@@ -618,6 +619,63 @@ describe("HandlerRegistry", () => {
         "synkro:metrics:test:event:received",
         undefined,
       );
+    });
+  });
+
+  describe("unregister", () => {
+    it("should remove a specific handler by reference", async () => {
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+      registry.register("test:event", handler1);
+      registry.register("test:event", handler2);
+
+      registry.unregister("test:event", handler1);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-unreg", payload: {} }));
+      await flushPromises();
+
+      expect(handler1).not.toHaveBeenCalled();
+      expect(handler2).toHaveBeenCalled();
+    });
+
+    it("should remove all handlers when no handlerFn provided", () => {
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+      registry.register("test:event", handler1);
+      registry.register("test:event", handler2);
+
+      registry.unregister("test:event");
+
+      const events = registry.getRegisteredEvents();
+      expect(events.filter((e) => e.type === "test:event")).toHaveLength(0);
+    });
+
+    it("should unsubscribe from channel when last handler is removed", () => {
+      const handler = vi.fn();
+      registry.register("test:event", handler);
+
+      registry.unregister("test:event", handler);
+
+      expect(mockRedis.unsubscribeFromChannel).toHaveBeenCalledWith("test:event");
+    });
+
+    it("should not unsubscribe from channel when handlers remain", () => {
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+      registry.register("test:event", handler1);
+      registry.register("test:event", handler2);
+
+      registry.unregister("test:event", handler1);
+
+      expect(mockRedis.unsubscribeFromChannel).not.toHaveBeenCalled();
+    });
+
+    it("should be a no-op for unknown event types", () => {
+      registry.unregister("unknown:event");
+      expect(mockRedis.unsubscribeFromChannel).not.toHaveBeenCalled();
     });
   });
 

@@ -34,6 +34,11 @@ export class InMemoryManager implements TransportManager {
     this.logger.debug(`Subscribed to channel "${channel}" (in-memory).`);
   }
 
+  unsubscribeFromChannel(channel: string): void {
+    this.subscriptions.delete(channel);
+    this.logger.debug(`Unsubscribed from channel "${channel}" (in-memory).`);
+  }
+
   async getCache(key: string): Promise<string | null> {
     this.evictIfExpired(key);
     return this.cache.get(key) ?? null;

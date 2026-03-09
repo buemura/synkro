@@ -14,8 +14,7 @@ export type OnWorkflowStepMetadata = {
 };
 
 export function OnEvent(eventType: string, retry?: RetryConfig) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-  return function <T extends Function>(
+  return function <T extends (...args: any[]) => any>(
     target: T,
     _context: ClassMethodDecoratorContext,
   ): T {
@@ -33,8 +32,7 @@ export function OnEvent(eventType: string, retry?: RetryConfig) {
 }
 
 export function OnWorkflowStep(workflowName: string, stepType: string) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-  return function <T extends Function>(
+  return function <T extends (...args: any[]) => any>(
     target: T,
     _context: ClassMethodDecoratorContext,
   ): T {

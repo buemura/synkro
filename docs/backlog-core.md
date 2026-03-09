@@ -28,8 +28,8 @@ All `JSON.parse` calls in `HandlerRegistry` and `WorkflowRegistry` are now wrapp
 ### ~~TD-08: `SynkroOptions.transport` field inconsistency `[SEC]`~~ ✅ Resolved in v0.11.0
 `Synkro.start` now explicitly validates the `transport` field. Only `"redis"`, `"in-memory"`, and `undefined` (defaults to Redis) are accepted. Invalid values throw a descriptive error instead of silently falling back to Redis.
 
-### TD-10: No `unsubscribe` / `off` capability
-No way to unregister an event handler or unsubscribe from a channel at runtime. Re-registering the same event calls subscribe again with no dedup. Should track per-event subscription once and provide explicit `off()` / `replace` semantics.
+### ~~TD-10: No `unsubscribe` / `off` capability~~ ✅ Resolved in v0.15.0
+`synkro.off(eventType, handler?)` removes specific or all handlers for an event type. When no handlers remain, the transport channel subscription is cleaned up automatically.
 
 ### ~~TD-05: `processingLocks` grow unbounded~~ ✅ Resolved in v0.11.0
 Added warning logs when `processingLocks` exceeds 1000 entries in both `HandlerRegistry` and `WorkflowRegistry`. Existing `finally` block cleanup verified correct. Warning enables production monitoring of potential lock accumulation.
@@ -70,16 +70,14 @@ Failure events now include an `errors` array with serialized error details (`mes
 ### ~~TD-03: In-memory transport ignores TTL~~ ✅ Resolved in v0.14.0
 `InMemoryManager` now correctly applies TTL via `applyTtl()` in `setCache()` and `setCacheIfNotExists()`, with lazy eviction on read via `evictIfExpired()`. The original `_ttlSeconds` unused parameter was renamed and wired up in a prior change.
 
-### TD-09: `eslint-disable` for decorator types
-**File:** `packages/core/src/handlers/decorators.ts:17-18`
-Both decorators use `@typescript-eslint/no-unsafe-function-type` disable comments. Could use more precise typings with `(...args: any[]) => any` or proper method decorator signatures.
+### ~~TD-09: `eslint-disable` for decorator types~~ ✅ Resolved in v0.15.0
+Replaced `Function` type constraint with `(...args: any[]) => any` in both decorators, eliminating the eslint-disable comments.
 
 ### ~~TD-12: Dead code - `eventToWorkflows` map~~ ✅ Resolved in v0.11.0
 Removed the unused `eventToWorkflows` map declaration and population code from `WorkflowRegistry`.
 
-### IMP-01: Typed payload generics
-**File:** `packages/core/src/types.ts`, `packages/core/src/synkro.ts`
-`HandlerCtx.payload` is typed as `unknown`, forcing every handler to cast. Introduce `HandlerCtx<T>` generics so handlers get typed payloads and `publish<T>(event, payload)` provides compile-time safety. Extend to decorator metadata typing.
+### ~~IMP-01: Typed payload generics~~ ✅ Resolved in v0.15.0
+`HandlerCtx<T>`, `HandlerFunction<T>`, and `SynkroEvent<T>` are now generic with a default of `unknown`. Handlers can opt into typed payloads for compile-time safety without breaking existing code.
 
 ### IMP-05: Structured logging
 Logger only supports `console.log`/`warn`/`error` with unstructured args. Should support structured JSON output with fields like `requestId`, `eventType`, `workflowName` for production observability.
@@ -90,12 +88,11 @@ Logger only supports `console.log`/`warn`/`error` with unstructured args. Should
 ### IMP-09: Test coverage for transports
 No dedicated test file for `in-memory.ts`. Most behavior tests use Redis mocks; in-memory transport parity is not verified. Should add shared transport contract tests executed against both implementations, covering TTL behavior, concurrent subscriptions, and edge cases.
 
-### FT-04: Workflow state query API
-**Starting points:** `packages/core/src/workflows/workflow-registry.ts`, `Synkro` public API
-No way to query the current state of a running workflow from outside. `WorkflowRegistry` has `getState` but it's private. Expose `synkro.getWorkflowState(requestId, workflowName)` for external inspection.
+### ~~FT-04: Workflow state query API~~ ✅ Resolved in v0.15.0
+`synkro.getWorkflowState(requestId, workflowName)` returns the current `WorkflowState` (with `status`, `currentStep`, `workflowName`) or `null`. The `WorkflowState` type is exported from `@synkro/core`.
 
-### FT-07: Workflow cancellation
-No way to cancel a running workflow. Should support `synkro.cancelWorkflow(requestId, workflowName)` that sets state to `cancelled` and stops step progression.
+### ~~FT-07: Workflow cancellation~~ ✅ Resolved in v0.15.0
+`synkro.cancelWorkflow(requestId, workflowName)` sets status to `"cancelled"`, clears active step timers, and prevents further step progression. Returns `true` if cancelled, `false` if not in a cancellable state.
 
 ### FT-09: Event filtering / conditional handlers
 Allow handlers to specify a filter predicate so they only execute when the payload matches certain conditions, reducing unnecessary handler invocations.

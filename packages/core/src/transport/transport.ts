@@ -4,6 +4,7 @@ export interface TransportManager {
     channel: string,
     callback: (message: string) => void,
   ): void;
+  unsubscribeFromChannel(channel: string): void;
   setCacheIfNotExists(
     key: string,
     value: string,

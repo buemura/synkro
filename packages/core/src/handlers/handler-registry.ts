@@ -136,6 +136,30 @@ export class HandlerRegistry {
     }
   }
 
+  unregister(eventType: string, handlerFn?: HandlerFunction): void {
+    const entries = this.handlers.get(eventType);
+    if (!entries) return;
+
+    if (handlerFn) {
+      for (const entry of entries) {
+        if (entry.handler === handlerFn) {
+          entries.delete(entry);
+          break;
+        }
+      }
+    } else {
+      entries.clear();
+    }
+
+    if (entries.size === 0) {
+      this.handlers.delete(eventType);
+      if (this.subscribedChannels.has(eventType)) {
+        this.subscribedChannels.delete(eventType);
+        this.redis.unsubscribeFromChannel(eventType);
+      }
+    }
+  }
+
   private async handleMessage(
     eventType: string,
     message: string,

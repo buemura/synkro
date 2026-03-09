@@ -20,3 +20,4 @@ export type {
   WorkflowInfo,
   WorkflowStepInfo,
 } from "./types.js";
+export type { WorkflowState } from "./workflows/index.js";
