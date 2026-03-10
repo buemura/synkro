@@ -9,6 +9,8 @@ import { InMemoryManager, RedisManager } from "./transport/index.js";
 import { Logger, setDebug } from "./logger.js";
 import { WorkflowRegistry } from "./workflows/index.js";
 
+import { parseEventType } from "./versioning.js";
+
 import type {
   DeadLetterItem,
   EventFilter,
@@ -135,10 +137,17 @@ export class Synkro {
       return requestId;
     }
 
-    await this.transport.publishMessage(
-      event,
-      JSON.stringify({ requestId, payload }),
-    );
+    const message = JSON.stringify({ requestId, payload });
+    await this.transport.publishMessage(event, message);
+
+    // Version fanout: if event is versioned (e.g. "user:created:v2"),
+    // also publish to the base channel so catch-all handlers receive it.
+    const parsed = parseEventType(event);
+    if (parsed.version !== null) {
+      const baseMessage = JSON.stringify({ requestId, payload, _version: parsed.version });
+      await this.transport.publishMessage(parsed.base, baseMessage);
+    }
+
     return requestId;
   }
 

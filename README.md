@@ -37,6 +37,7 @@ Define standalone events and multi-step workflows with conditional branching, re
 - **Workflow Chaining** — Trigger follow-up workflows on completion, success, or failure
 - **Retry Support** — Configurable retry logic per event or workflow step
 - **Schema Validation** — Validate payloads at publish time and handler dispatch with any validation library
+- **Event Versioning** — Versioned event types (`user:created:v2`) with automatic base-event fanout
 - **Workflow Timeout** — Step-level and workflow-level timeouts with automatic failure routing
 - **Graceful Shutdown** — Drain active handlers before disconnecting with configurable timeout
 - **Transport Options** — Redis for production, in-memory for development and testing

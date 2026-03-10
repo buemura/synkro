@@ -84,8 +84,8 @@ Logger now supports `logFormat: "json"` for structured JSON output with `level`,
 ### ~~IMP-08: Configurable key retention / TTL policy~~ ✅ Resolved in v0.13.0
 `SynkroOptions` now accepts a `retention` config with per-category TTLs: `lockTtl`, `dedupTtl`, `stateTtl`, and `metricsTtl`. All fields are optional with sensible defaults. Metrics keys now support TTL via an extended `incrementCache` transport method. Also resolves TD-07.
 
-### IMP-09: Test coverage for transports
-No dedicated test file for `in-memory.ts`. Most behavior tests use Redis mocks; in-memory transport parity is not verified. Should add shared transport contract tests executed against both implementations, covering TTL behavior, concurrent subscriptions, and edge cases.
+### ~~IMP-09: Test coverage for transports~~ ✅ Resolved in v0.17.0
+Shared transport contract test suite (`transportContractTests`) validates `InMemoryManager` against the full `TransportManager` interface: pub/sub round-trips, cache CRUD with TTL expiry, `setCacheIfNotExists` atomicity, increment, list operations with negative indices, `deleteKey`, and `disconnect` cleanup. 24 contract tests.
 
 ### ~~FT-04: Workflow state query API~~ ✅ Resolved in v0.15.0
 `synkro.getWorkflowState(requestId, workflowName)` returns the current `WorkflowState` (with `status`, `currentStep`, `workflowName`) or `null`. The `WorkflowState` type is exported from `@synkro/core`.
@@ -99,8 +99,8 @@ No dedicated test file for `in-memory.ts`. Most behavior tests use Redis mocks; 
 ### ~~FT-14: Implicit step registration for onSuccess/onFailure targets~~ ✅ Resolved in v0.12.0
 Steps referenced in `onSuccess` or `onFailure` are now automatically appended as implicit steps during workflow normalization. Explicit declaration in the `steps` array is no longer required, eliminating duplication while remaining fully backward compatible.
 
-### FT-12: Event versioning
-No event versioning support. When event payload schemas evolve, there's no way to handle v1 vs v2 of the same event. Support event type versioning (e.g., `user:created:v2`).
+### ~~FT-12: Event versioning~~ ✅ Resolved in v0.17.0
+Versioned event types (`user:created:v2`) are now supported with automatic base-event fanout. Publishing a versioned event delivers to both the exact channel and the base channel, so catch-all handlers on `user:created` receive all versions. Unversioned events are unaffected. New exports: `parseEventType()`, `isVersionedEvent()`, `ParsedEventType`.
 
 ---
 

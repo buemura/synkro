@@ -634,4 +634,126 @@ describe("Integration", () => {
       expect(received).toEqual([{ late: true }]);
     });
   });
+
+  // ───────────────────────────── Event Versioning ─────────────────────────────
+
+  describe("event versioning", () => {
+    it("should deliver versioned event to base handler with _version metadata", async () => {
+      const received: HandlerCtx[] = [];
+
+      synkro = await startInMemory({
+        events: [
+          {
+            type: "user:created",
+            handler: (ctx) => {
+              received.push({ ...ctx });
+            },
+          },
+        ],
+      });
+
+      await synkro.publish("user:created:v2", { name: "Alice" });
+      await settle();
+
+      expect(received).toHaveLength(1);
+      expect((received[0]!.payload as Record<string, unknown>).name).toBe("Alice");
+    });
+
+    it("should deliver versioned event to version-specific handler", async () => {
+      const received: HandlerCtx[] = [];
+
+      synkro = await startInMemory({
+        events: [
+          {
+            type: "user:created:v2",
+            handler: (ctx) => {
+              received.push({ ...ctx });
+            },
+          },
+        ],
+      });
+
+      await synkro.publish("user:created:v2", { name: "Bob" });
+      await settle();
+
+      expect(received).toHaveLength(1);
+      expect((received[0]!.payload as Record<string, unknown>).name).toBe("Bob");
+    });
+
+    it("should deliver versioned event to both base and version-specific handlers", async () => {
+      const baseCalls: unknown[] = [];
+      const versionedCalls: unknown[] = [];
+
+      synkro = await startInMemory({
+        events: [
+          {
+            type: "order:placed",
+            handler: (ctx) => {
+              baseCalls.push(ctx.payload);
+            },
+          },
+          {
+            type: "order:placed:v2",
+            handler: (ctx) => {
+              versionedCalls.push(ctx.payload);
+            },
+          },
+        ],
+      });
+
+      await synkro.publish("order:placed:v2", { orderId: 1 });
+      await settle();
+
+      expect(versionedCalls).toHaveLength(1);
+      expect(baseCalls).toHaveLength(1);
+    });
+
+    it("should NOT deliver unversioned event to version-specific handler", async () => {
+      const baseCalls: unknown[] = [];
+      const versionedCalls: unknown[] = [];
+
+      synkro = await startInMemory({
+        events: [
+          {
+            type: "item:sold",
+            handler: (ctx) => {
+              baseCalls.push(ctx.payload);
+            },
+          },
+          {
+            type: "item:sold:v2",
+            handler: (ctx) => {
+              versionedCalls.push(ctx.payload);
+            },
+          },
+        ],
+      });
+
+      await synkro.publish("item:sold", { sku: "ABC" });
+      await settle();
+
+      expect(baseCalls).toHaveLength(1);
+      expect(versionedCalls).toHaveLength(0);
+    });
+
+    it("should track metrics for both versioned and base events", async () => {
+      synkro = await startInMemory({
+        events: [
+          { type: "metric:evt", handler: () => {} },
+          { type: "metric:evt:v3", handler: () => {} },
+        ],
+      });
+
+      await synkro.publish("metric:evt:v3", {});
+      await settle();
+
+      const baseMetrics = await synkro.getEventMetrics("metric:evt");
+      const versionedMetrics = await synkro.getEventMetrics("metric:evt:v3");
+
+      expect(baseMetrics.received).toBe(1);
+      expect(baseMetrics.completed).toBe(1);
+      expect(versionedMetrics.received).toBe(1);
+      expect(versionedMetrics.completed).toBe(1);
+    });
+  });
 });
