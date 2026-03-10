@@ -158,6 +158,21 @@ export class HttpTransportManager implements TransportManager {
     return value;
   }
 
+  async pushToList(key: string, value: string): Promise<void> {
+    const redis = await this.getRedis();
+    await redis.rpush(key, value);
+  }
+
+  async getListRange(key: string, start: number, stop: number): Promise<string[]> {
+    const redis = await this.getRedis();
+    return redis.lrange(key, start, stop);
+  }
+
+  async deleteKey(key: string): Promise<void> {
+    const redis = await this.getRedis();
+    await redis.del(key);
+  }
+
   async disconnect(): Promise<void> {
     if (this.redis) {
       await this.redis.quit();
