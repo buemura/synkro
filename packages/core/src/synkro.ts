@@ -10,8 +10,11 @@ import { Logger, setDebug } from "./logger.js";
 import { WorkflowRegistry } from "./workflows/index.js";
 
 import type {
+  DeadLetterItem,
+  EventFilter,
   EventMetrics,
   HandlerFunction,
+  LogFormat,
   RetentionConfig,
   RetryConfig,
   SchemaValidator,
@@ -32,11 +35,11 @@ export class Synkro {
   private logger: Logger;
   private readonly drainTimeout: number;
 
-  private constructor(transport: TransportManager, logger: Logger, retention?: RetentionConfig, drainTimeout?: number) {
+  private constructor(transport: TransportManager, logger: Logger, retention?: RetentionConfig, drainTimeout?: number, dlqEnabled?: boolean) {
     this.transport = transport;
     this.logger = logger;
     this.drainTimeout = drainTimeout ?? DEFAULT_DRAIN_TIMEOUT;
-    this.handlerRegistry = new HandlerRegistry(transport, retention, this.logger);
+    this.handlerRegistry = new HandlerRegistry(transport, retention, this.logger, dlqEnabled ?? false);
     this.workflowRegistry = new WorkflowRegistry(transport, this.handlerRegistry, retention, this.logger);
     this.handlerRegistry.setPublishFn(this.publish.bind(this));
   }
@@ -44,7 +47,7 @@ export class Synkro {
   static async start(options: SynkroOptions): Promise<Synkro> {
     setDebug(options.debug ?? false);
 
-    const logger = new Logger(options.debug ?? false);
+    const logger = new Logger(options.debug ?? false, options.logFormat ?? "text");
 
     let transport: TransportManager;
     if (typeof options.transport === "object" && options.transport !== null) {
@@ -62,7 +65,7 @@ export class Synkro {
       );
     }
 
-    const instance = new Synkro(transport, logger, options.retention, options.drainTimeout);
+    const instance = new Synkro(transport, logger, options.retention, options.drainTimeout, options.deadLetterQueue);
 
     // Patch decorated workflow step handlers before registering workflows
     const workflows = options.workflows
@@ -77,7 +80,7 @@ export class Synkro {
 
     if (options.events) {
       for (const event of options.events) {
-        instance.on(event.type, event.handler, event.retry, event.schema);
+        instance.on(event.type, event.handler, event.retry, event.schema, event.filter);
       }
     }
 
@@ -107,8 +110,8 @@ export class Synkro {
     }
   }
 
-  on(eventType: string, handler: HandlerFunction, retry?: RetryConfig, schema?: SchemaValidator): void {
-    this.handlerRegistry.register(eventType, handler, retry, schema);
+  on(eventType: string, handler: HandlerFunction, retry?: RetryConfig, schema?: SchemaValidator, filter?: EventFilter): void {
+    this.handlerRegistry.register(eventType, handler, retry, schema, filter);
   }
 
   off(eventType: string, handler?: HandlerFunction): void {
@@ -149,6 +152,20 @@ export class Synkro {
 
   async getEventMetrics(eventType: string): Promise<EventMetrics> {
     return this.handlerRegistry.getEventMetrics(eventType);
+  }
+
+  async getDeadLetterItems(eventType: string, options?: { limit?: number }): Promise<DeadLetterItem[]> {
+    const limit = options?.limit ?? 100;
+    const raw = await this.transport.getListRange(`synkro:dlq:${eventType}`, 0, limit - 1);
+    return raw.map((item) => JSON.parse(item) as DeadLetterItem);
+  }
+
+  async replayDeadLetterItem(item: DeadLetterItem): Promise<string> {
+    return this.publish(item.eventType, item.payload, item.requestId);
+  }
+
+  async clearDeadLetterQueue(eventType: string): Promise<void> {
+    await this.transport.deleteKey(`synkro:dlq:${eventType}`);
   }
 
   introspect(): SynkroIntrospection {

@@ -12,11 +12,14 @@ export type RetryConfig = {
   retryable?: (error: unknown) => boolean;
 };
 
+export type EventFilter<T = unknown> = (payload: T) => boolean;
+
 export type SynkroEvent<T = unknown> = {
   type: string;
   handler: HandlerFunction<T>;
   retry?: RetryConfig;
   schema?: SchemaValidator;
+  filter?: EventFilter<T>;
 };
 
 export type SynkroWorkflowStep = {
@@ -44,16 +47,29 @@ export type RetentionConfig = {
   metricsTtl?: number;
 };
 
+export type LogFormat = "text" | "json";
+
+export type DeadLetterItem = {
+  eventType: string;
+  requestId: string;
+  payload: unknown;
+  errors: Array<{ message: string; name?: string }>;
+  failedAt: string;
+  attempts: number;
+};
+
 export type SynkroOptions = {
   transport?: "redis" | "in-memory" | TransportManager;
   connectionUrl?: string;
   debug?: boolean;
+  logFormat?: LogFormat;
   events?: SynkroEvent[];
   workflows?: SynkroWorkflow[];
   handlers?: object[];
   retention?: RetentionConfig;
   schemas?: Record<string, SchemaValidator>;
   drainTimeout?: number;
+  deadLetterQueue?: boolean;
 };
 
 export type PublishFunction = (

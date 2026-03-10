@@ -40,9 +40,8 @@ Logger is now a class (`Logger`) with instance-level `debugEnabled` state. Each 
 ### ~~TD-07: Hardcoded workflow state TTL~~ ✅ Resolved in v0.13.0
 Workflow state TTL is now configurable via `retention.stateTtl` in `SynkroOptions`. Subsumed by IMP-08.
 
-### FT-01: Dead letter queue for failed events
-**Starting points:** `packages/core/src/handlers/handler-registry.ts`, `packages/core/src/workflows/workflow-registry.ts`
-Failed events (after retry exhaustion) are only published to a `event:{type}:failed` channel. There's no persistent dead letter queue for later inspection or replay. Enables operational recovery and observability.
+### ~~FT-01: Dead letter queue for failed events~~ ✅ Resolved in v0.16.0
+Opt-in `deadLetterQueue: true` persists failed events to `synkro:dlq:{eventType}` lists after retry exhaustion. New API methods: `getDeadLetterItems()`, `replayDeadLetterItem()`, `clearDeadLetterQueue()`. Transport interface extended with `pushToList`, `getListRange`, `deleteKey`.
 
 ### FT-02: Scheduled and delayed event publishing
 **Starting points:** `packages/core/src/synkro.ts`, `packages/core/src/types.ts`, transport interfaces
@@ -79,8 +78,8 @@ Removed the unused `eventToWorkflows` map declaration and population code from `
 ### ~~IMP-01: Typed payload generics~~ ✅ Resolved in v0.15.0
 `HandlerCtx<T>`, `HandlerFunction<T>`, and `SynkroEvent<T>` are now generic with a default of `unknown`. Handlers can opt into typed payloads for compile-time safety without breaking existing code.
 
-### IMP-05: Structured logging
-Logger only supports `console.log`/`warn`/`error` with unstructured args. Should support structured JSON output with fields like `requestId`, `eventType`, `workflowName` for production observability.
+### ~~IMP-05: Structured logging~~ ✅ Resolved in v0.16.0
+Logger now supports `logFormat: "json"` for structured JSON output with `level`, `msg`, `timestamp`, and contextual fields. All internal log call sites updated to pass structured fields. Text mode (default) remains backward-compatible.
 
 ### ~~IMP-08: Configurable key retention / TTL policy~~ ✅ Resolved in v0.13.0
 `SynkroOptions` now accepts a `retention` config with per-category TTLs: `lockTtl`, `dedupTtl`, `stateTtl`, and `metricsTtl`. All fields are optional with sensible defaults. Metrics keys now support TTL via an extended `incrementCache` transport method. Also resolves TD-07.
@@ -94,8 +93,8 @@ No dedicated test file for `in-memory.ts`. Most behavior tests use Redis mocks; 
 ### ~~FT-07: Workflow cancellation~~ ✅ Resolved in v0.15.0
 `synkro.cancelWorkflow(requestId, workflowName)` sets status to `"cancelled"`, clears active step timers, and prevents further step progression. Returns `true` if cancelled, `false` if not in a cancellable state.
 
-### FT-09: Event filtering / conditional handlers
-Allow handlers to specify a filter predicate so they only execute when the payload matches certain conditions, reducing unnecessary handler invocations.
+### ~~FT-09: Event filtering / conditional handlers~~ ✅ Resolved in v0.16.0
+`SynkroEvent.filter` and `synkro.on()` now accept an optional `EventFilter` predicate. Handlers whose filter returns `false` are skipped without triggering failure. When all handlers are filtered out, no events or metrics are emitted.
 
 ### ~~FT-14: Implicit step registration for onSuccess/onFailure targets~~ ✅ Resolved in v0.12.0
 Steps referenced in `onSuccess` or `onFailure` are now automatically appended as implicit steps during workflow normalization. Explicit declaration in the `steps` array is no longer required, eliminating duplication while remaining fully backward compatible.

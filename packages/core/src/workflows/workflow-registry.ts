@@ -99,9 +99,10 @@ export class WorkflowRegistry {
       }
 
       this.subscribeToWorkflowEvents(workflow);
-      this.logger.debug(
-        `[WorkflowRegistry] - Workflow "${workflow.name}" registered with ${workflow.steps.length} steps`,
-      );
+      this.logger.debug("[WorkflowRegistry] Workflow registered", {
+        workflowName: workflow.name,
+        steps: workflow.steps.length,
+      });
     }
   }
 
@@ -112,9 +113,10 @@ export class WorkflowRegistry {
   ): void {
     const workflow = this.workflows.get(workflowName);
     if (!workflow) {
-      this.logger.warn(
-        `[WorkflowRegistry] - Workflow "${workflowName}" not found for step handler "${stepType}"`,
-      );
+      this.logger.warn("[WorkflowRegistry] Workflow not found for step handler", {
+        workflowName,
+        stepType,
+      });
       return;
     }
 
@@ -147,9 +149,11 @@ export class WorkflowRegistry {
 
     const firstStep = workflow.steps[0]!;
     const channel = this.stepChannel(workflowName, firstStep.type);
-    this.logger.debug(
-      `[WorkflowRegistry] - Starting workflow "${workflowName}" (requestId: ${requestId}), publishing "${firstStep.type}"`,
-    );
+    this.logger.debug("[WorkflowRegistry] Starting workflow", {
+      workflowName,
+      requestId,
+      firstStep: firstStep.type,
+    });
 
     await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
     this.startStepTimer(workflow, 0, requestId, payload);
@@ -200,9 +204,12 @@ export class WorkflowRegistry {
       }
 
       if (state.currentStep !== stepIndex) {
-        this.logger.debug(
-          `[WorkflowRegistry] - Ignoring stale completion for "${workflow.name}" (requestId: ${requestId}): expected step ${state.currentStep}, got ${stepIndex}`,
-        );
+        this.logger.debug("[WorkflowRegistry] Ignoring stale completion", {
+          workflowName: workflow.name,
+          requestId,
+          expectedStep: state.currentStep,
+          receivedStep: stepIndex,
+        });
         return;
       }
 
@@ -212,9 +219,10 @@ export class WorkflowRegistry {
       if (onSuccess) {
         const targetIndex = this.findStepIndex(workflow, onSuccess);
         if (targetIndex === -1) {
-          this.logger.error(
-            `[WorkflowRegistry] - onSuccess target "${onSuccess}" not found in workflow "${workflow.name}"`,
-          );
+          this.logger.error("[WorkflowRegistry] onSuccess target not found", {
+            workflowName: workflow.name,
+            target: onSuccess,
+          });
           return;
         }
         await this.routeToStep(workflow, requestId, targetIndex, payload);
@@ -228,9 +236,10 @@ export class WorkflowRegistry {
         state.status = "completed";
         state.currentStep = stepIndex;
         await this.saveState(requestId, state);
-        this.logger.debug(
-          `[WorkflowRegistry] - Workflow "${workflow.name}" completed (requestId: ${requestId})`,
-        );
+        this.logger.debug("[WorkflowRegistry] Workflow completed", {
+          workflowName: workflow.name,
+          requestId,
+        });
         await this.triggerNextWorkflows(
           workflow,
           "completed",
@@ -260,9 +269,12 @@ export class WorkflowRegistry {
       }
 
       if (state.currentStep !== stepIndex) {
-        this.logger.debug(
-          `[WorkflowRegistry] - Ignoring stale failure for "${workflow.name}" (requestId: ${requestId}): expected step ${state.currentStep}, got ${stepIndex}`,
-        );
+        this.logger.debug("[WorkflowRegistry] Ignoring stale failure", {
+          workflowName: workflow.name,
+          requestId,
+          expectedStep: state.currentStep,
+          receivedStep: stepIndex,
+        });
         return;
       }
 
@@ -272,9 +284,10 @@ export class WorkflowRegistry {
       if (onFailure) {
         const targetIndex = this.findStepIndex(workflow, onFailure);
         if (targetIndex === -1) {
-          this.logger.error(
-            `[WorkflowRegistry] - onFailure target "${onFailure}" not found in workflow "${workflow.name}"`,
-          );
+          this.logger.error("[WorkflowRegistry] onFailure target not found", {
+            workflowName: workflow.name,
+            target: onFailure,
+          });
           return;
         }
         await this.routeToStep(workflow, requestId, targetIndex, payload);
@@ -284,9 +297,11 @@ export class WorkflowRegistry {
       this.clearAllTimers(requestId, workflow.name, workflow.steps.length);
       state.status = "failed";
       await this.saveState(requestId, state);
-      this.logger.error(
-        `[WorkflowRegistry] - Workflow "${workflow.name}" failed at step "${currentStep.type}" (requestId: ${requestId})`,
-      );
+      this.logger.error("[WorkflowRegistry] Workflow failed", {
+        workflowName: workflow.name,
+        requestId,
+        failedStep: currentStep.type,
+      });
       await this.triggerNextWorkflows(workflow, "failed", requestId, payload);
     });
   }
@@ -306,9 +321,12 @@ export class WorkflowRegistry {
 
     const targetStep = workflow.steps[targetIndex]!;
     const channel = this.stepChannel(workflow.name, targetStep.type);
-    this.logger.debug(
-      `[WorkflowRegistry] - Workflow "${workflow.name}" advancing to step ${targetIndex}: "${targetStep.type}" (requestId: ${requestId})`,
-    );
+    this.logger.debug("[WorkflowRegistry] Advancing to step", {
+      workflowName: workflow.name,
+      requestId,
+      stepIndex: targetIndex,
+      stepType: targetStep.type,
+    });
 
     await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
     this.startStepTimer(workflow, targetIndex, requestId, payload);
@@ -334,14 +352,17 @@ export class WorkflowRegistry {
 
     for (const target of targets) {
       if (this.workflows.has(target)) {
-        this.logger.debug(
-          `[WorkflowRegistry] - Workflow "${workflow.name}" triggering workflow "${target}" (requestId: ${requestId})`,
-        );
+        this.logger.debug("[WorkflowRegistry] Triggering chained workflow", {
+          fromWorkflow: workflow.name,
+          targetWorkflow: target,
+          requestId,
+        });
         await this.startWorkflow(target, requestId, payload);
       } else {
-        this.logger.error(
-          `[WorkflowRegistry] - Chained workflow "${target}" not found (from "${workflow.name}")`,
-        );
+        this.logger.error("[WorkflowRegistry] Chained workflow not found", {
+          fromWorkflow: workflow.name,
+          targetWorkflow: target,
+        });
       }
     }
   }
@@ -365,9 +386,12 @@ export class WorkflowRegistry {
 
     const timer = setTimeout(() => {
       this.activeTimers.delete(key);
-      this.logger.warn(
-        `[WorkflowRegistry] - Step "${step.type}" timed out after ${timeoutMs}ms in workflow "${workflow.name}" (requestId: ${requestId})`,
-      );
+      this.logger.warn("[WorkflowRegistry] Step timed out", {
+        workflowName: workflow.name,
+        requestId,
+        stepType: step.type,
+        timeoutMs,
+      });
       void this.redis.publishMessage(
         `event:${channel}:failed`,
         JSON.stringify({
@@ -470,17 +494,17 @@ export class WorkflowRegistry {
     const dedupeKey = this.dedupeKey(lockKey);
     const alreadyProcessed = await this.redis.getCache(dedupeKey);
     if (alreadyProcessed === "1") {
-      this.logger.debug(
-        `[WorkflowRegistry] - Duplicate transition ignored (${lockKey})`,
-      );
+      this.logger.debug("[WorkflowRegistry] Duplicate transition ignored", {
+        lockKey,
+      });
       return;
     }
 
     this.processingLocks.add(lockKey);
     if (this.processingLocks.size > 1000) {
-      this.logger.warn(
-        `[WorkflowRegistry] - processingLocks size exceeded 1000 (current: ${this.processingLocks.size})`,
-      );
+      this.logger.warn("[WorkflowRegistry] processingLocks size exceeded 1000", {
+        size: this.processingLocks.size,
+      });
     }
 
     const distributedLockKey = this.distributedLockKey(lockKey);
@@ -524,16 +548,14 @@ export class WorkflowRegistry {
     try {
       parsed = JSON.parse(message) as { requestId: string; payload: unknown };
     } catch {
-      this.logger.error(
-        `[WorkflowRegistry] - Malformed message, dropping: ${message}`,
-      );
+      this.logger.error("[WorkflowRegistry] Malformed message, dropping", {
+        message,
+      });
       return null;
     }
 
     if (!parsed.requestId || typeof parsed.requestId !== "string") {
-      this.logger.error(
-        `[WorkflowRegistry] - Missing or invalid requestId, dropping message`,
-      );
+      this.logger.error("[WorkflowRegistry] Missing or invalid requestId, dropping message");
       return null;
     }
 
@@ -575,9 +597,10 @@ export class WorkflowRegistry {
     state.status = "cancelled";
     await this.saveState(requestId, state);
 
-    this.logger.debug(
-      `[WorkflowRegistry] - Workflow "${workflowName}" cancelled (requestId: ${requestId})`,
-    );
+    this.logger.debug("[WorkflowRegistry] Workflow cancelled", {
+      workflowName,
+      requestId,
+    });
 
     return true;
   }

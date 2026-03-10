@@ -2,6 +2,8 @@ import { Logger } from "../logger.js";
 
 import type { TransportManager } from "../transport/transport.js";
 import type {
+  DeadLetterItem,
+  EventFilter,
   HandlerCtx,
   HandlerFunction,
   PublishFunction,
@@ -24,8 +26,10 @@ export type ExecuteHandlerOptions = {
   publishFn: PublishFunction;
   retry?: RetryConfig;
   schema?: SchemaValidator;
+  filter?: EventFilter;
   retention?: RetentionConfig;
   trackMetrics?: boolean;
+  dlqEnabled?: boolean;
   logger?: Logger;
 };
 
@@ -79,10 +83,20 @@ export async function executeHandler(options: ExecuteHandlerOptions): Promise<Ex
     publishFn,
     retry,
     schema,
+    filter,
     retention,
     trackMetrics = !eventType.startsWith("workflow:"),
     logger = new Logger(),
   } = options;
+
+  // Apply filter before any locking/dedup work
+  if (filter && !filter(payload)) {
+    logger.debug("[executeHandler] Handler filtered out", {
+      eventType,
+      requestId,
+    });
+    return { success: true };
+  }
 
   const lockTtl = retention?.lockTtl ?? DEFAULT_LOCK_TTL;
   const dedupTtl = retention?.dedupTtl ?? DEFAULT_DEDUPE_TTL;
@@ -95,9 +109,10 @@ export async function executeHandler(options: ExecuteHandlerOptions): Promise<Ex
   // Check dedup
   const alreadyProcessed = await transport.getCache(dedupeKey);
   if (alreadyProcessed === "1") {
-    logger.debug(
-      `[executeHandler] duplicate message ignored for "${eventType}" (requestId: ${requestId})`,
-    );
+    logger.debug("[executeHandler] Duplicate message ignored", {
+      eventType,
+      requestId,
+    });
     return { success: true };
   }
 
@@ -109,9 +124,10 @@ export async function executeHandler(options: ExecuteHandlerOptions): Promise<Ex
   );
 
   if (!lockAcquired) {
-    logger.debug(
-      `[executeHandler] in-flight message ignored for "${eventType}" (requestId: ${requestId})`,
-    );
+    logger.debug("[executeHandler] In-flight message ignored", {
+      eventType,
+      requestId,
+    });
     return { success: true };
   }
 
@@ -158,14 +174,22 @@ export async function executeHandler(options: ExecuteHandlerOptions): Promise<Ex
             retry?.delayMs,
             retry?.jitter,
           );
-          logger.warn(
-            `[executeHandler] - Handler "${eventType}" failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`,
-          );
+          logger.warn("[executeHandler] Handler failed, retrying", {
+            eventType,
+            requestId,
+            attempt: attempt + 1,
+            maxAttempts: maxRetries + 1,
+            delayMs: delay,
+          });
           await sleep(delay);
         } else {
-          logger.error(
-            `[executeHandler] - Handler "${eventType}" failed after ${attempt + 1} attempt(s): ${error}`,
-          );
+          logger.error("[executeHandler] Handler failed", {
+            eventType,
+            requestId,
+            attempt: attempt + 1,
+            maxAttempts: maxRetries + 1,
+            error: String(error),
+          });
         }
       }
     }
@@ -186,14 +210,36 @@ export async function executeHandler(options: ExecuteHandlerOptions): Promise<Ex
       payload: ctx.payload,
     };
 
-    if (!success) {
-      eventPayload.errors = [serializeError(lastError)];
+    const errors = !success ? [serializeError(lastError)] : undefined;
+
+    if (errors) {
+      eventPayload.errors = errors;
     }
 
     await transport.publishMessage(
       `event:${eventType}:${success ? "completed" : "failed"}`,
       JSON.stringify(eventPayload),
     );
+
+    // Push to dead letter queue on failure
+    if (!success && options.dlqEnabled && trackMetrics) {
+      const dlqItem: DeadLetterItem = {
+        eventType,
+        requestId,
+        payload,
+        errors: errors!,
+        failedAt: new Date().toISOString(),
+        attempts: (retry?.maxRetries ?? 0) + 1,
+      };
+      await transport.pushToList(
+        `synkro:dlq:${eventType}`,
+        JSON.stringify(dlqItem),
+      );
+      logger.debug("[executeHandler] Event pushed to DLQ", {
+        eventType,
+        requestId,
+      });
+    }
 
     // Mark as processed
     await transport.setCache(dedupeKey, "1", dedupTtl);

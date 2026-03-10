@@ -81,14 +81,14 @@ export class RedisManager implements TransportManager {
         );
       })
       .catch((err: unknown) => {
-        logger.error(`Failed to subscribe to channels:`, err);
+        logger.error("Failed to subscribe to channels", { error: String(err) });
       });
   }
 
   unsubscribeFromChannel(channel: string): void {
     this.channelCallbacks.delete(channel);
     this.subscriber.unsubscribe(channel).catch((err: unknown) => {
-      logger.error(`[RedisManager] Failed to unsubscribe from "${channel}":`, err);
+      logger.error("[RedisManager] Failed to unsubscribe", { channel, error: String(err) });
     });
   }
 
@@ -131,6 +131,18 @@ export class RedisManager implements TransportManager {
     return value;
   }
 
+  async pushToList(key: string, value: string): Promise<void> {
+    await this.cacheClient.rpush(key, value);
+  }
+
+  async getListRange(key: string, start: number, stop: number): Promise<string[]> {
+    return await this.cacheClient.lrange(key, start, stop);
+  }
+
+  async deleteKey(key: string): Promise<void> {
+    await this.cacheClient.del(key);
+  }
+
   async disconnect(): Promise<void> {
     await this.publisher.quit();
     await this.subscriber.quit();
@@ -150,7 +162,7 @@ export class RedisManager implements TransportManager {
     });
 
     client.on("error", (err: Error) => {
-      logger.error(`[RedisManager] ${role} connection error:`, err.message);
+      logger.error("[RedisManager] Connection error", { role, error: err.message });
     });
 
     client.on("connect", () => {

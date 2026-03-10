@@ -17,6 +17,9 @@ function createMockRedis(): RedisManager {
     setCache: vi.fn().mockResolvedValue(undefined),
     deleteCache: vi.fn(),
     incrementCache: vi.fn().mockResolvedValue(1),
+    pushToList: vi.fn().mockResolvedValue(undefined),
+    getListRange: vi.fn().mockResolvedValue([]),
+    deleteKey: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn(),
   } as unknown as RedisManager;
 }

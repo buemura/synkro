@@ -6,6 +6,7 @@ export class InMemoryManager implements TransportManager {
   private subscriptions = new Map<string, Set<(message: string) => void>>();
   private cache = new Map<string, string>();
   private cacheExpiry = new Map<string, number>();
+  private lists = new Map<string, string[]>();
   private logger: Logger;
 
   constructor(logger?: Logger) {
@@ -89,10 +90,32 @@ export class InMemoryManager implements TransportManager {
     return next;
   }
 
+  async pushToList(key: string, value: string): Promise<void> {
+    if (!this.lists.has(key)) {
+      this.lists.set(key, []);
+    }
+    this.lists.get(key)!.push(value);
+  }
+
+  async getListRange(key: string, start: number, stop: number): Promise<string[]> {
+    const list = this.lists.get(key);
+    if (!list) return [];
+    // Redis LRANGE is inclusive on both ends, and -1 means last element
+    const end = stop < 0 ? list.length + stop + 1 : stop + 1;
+    return list.slice(start, end);
+  }
+
+  async deleteKey(key: string): Promise<void> {
+    this.lists.delete(key);
+    this.cache.delete(key);
+    this.cacheExpiry.delete(key);
+  }
+
   async disconnect(): Promise<void> {
     this.subscriptions.clear();
     this.cache.clear();
     this.cacheExpiry.clear();
+    this.lists.clear();
   }
 
   private evictIfExpired(key: string): void {

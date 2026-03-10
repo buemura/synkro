@@ -2,6 +2,8 @@ import { Logger } from "../logger.js";
 
 import type { TransportManager } from "../transport/transport.js";
 import type {
+  DeadLetterItem,
+  EventFilter,
   EventInfo,
   EventMetrics,
   HandlerCtx,
@@ -17,6 +19,7 @@ type HandlerEntry = {
   handler: HandlerFunction;
   retry?: RetryConfig;
   schema?: SchemaValidator;
+  filter?: EventFilter;
 };
 
 const DEFAULT_RETRY_DELAY_MS = 1000;
@@ -66,6 +69,7 @@ export class HandlerRegistry {
     private redis: TransportManager,
     retention?: RetentionConfig,
     private readonly logger: Logger = new Logger(),
+    private readonly dlqEnabled: boolean = false,
   ) {
     this.lockTtl = retention?.lockTtl ?? DEFAULT_LOCK_TTL;
     this.dedupTtl = retention?.dedupTtl ?? DEFAULT_DEDUPE_TTL;
@@ -118,6 +122,7 @@ export class HandlerRegistry {
     handlerFn: HandlerFunction,
     retry?: RetryConfig,
     schema?: SchemaValidator,
+    filter?: EventFilter,
   ): void {
     if (!this.handlers.has(eventType)) {
       this.handlers.set(eventType, new Set());
@@ -126,6 +131,7 @@ export class HandlerRegistry {
       handler: handlerFn,
       ...(retry && { retry }),
       ...(schema && { schema }),
+      ...(filter && { filter }),
     });
 
     if (!this.subscribedChannels.has(eventType)) {
@@ -173,16 +179,17 @@ export class HandlerRegistry {
     try {
       event = JSON.parse(message) as { requestId: string; payload: unknown };
     } catch {
-      this.logger.error(
-        `[HandlerRegistry] - Malformed message on "${eventType}", dropping: ${message}`,
-      );
+      this.logger.error("[HandlerRegistry] Malformed message, dropping", {
+        eventType,
+        message,
+      });
       return;
     }
 
     if (!event.requestId || typeof event.requestId !== "string") {
-      this.logger.error(
-        `[HandlerRegistry] - Missing or invalid requestId on "${eventType}", dropping message`,
-      );
+      this.logger.error("[HandlerRegistry] Missing or invalid requestId, dropping message", {
+        eventType,
+      });
       return;
     }
 
@@ -191,9 +198,11 @@ export class HandlerRegistry {
       try {
         globalSchema(event.payload);
       } catch (err) {
-        this.logger.error(
-          `[HandlerRegistry] - Schema validation failed for "${eventType}" (requestId: ${event.requestId}): ${err}`,
-        );
+        this.logger.error("[HandlerRegistry] Schema validation failed", {
+          eventType,
+          requestId: event.requestId,
+          error: String(err),
+        });
         return;
       }
     }
@@ -206,17 +215,18 @@ export class HandlerRegistry {
     const dedupeKey = this.dedupeKey(localLockKey);
     const alreadyProcessed = await this.redis.getCache(dedupeKey);
     if (alreadyProcessed === "1") {
-      this.logger.debug(
-        `[HandlerRegistry] duplicate message ignored for "${eventType}" (requestId: ${event.requestId})`,
-      );
+      this.logger.debug("[HandlerRegistry] Duplicate message ignored", {
+        eventType,
+        requestId: event.requestId,
+      });
       return;
     }
 
     this.processingLocks.add(localLockKey);
     if (this.processingLocks.size > 1000) {
-      this.logger.warn(
-        `[HandlerRegistry] - processingLocks size exceeded 1000 (current: ${this.processingLocks.size})`,
-      );
+      this.logger.warn("[HandlerRegistry] processingLocks size exceeded 1000", {
+        size: this.processingLocks.size,
+      });
     }
 
     const distributedLockKey = this.distributedLockKey(localLockKey);
@@ -232,22 +242,39 @@ export class HandlerRegistry {
       );
 
       if (!distributedLockAcquired) {
-        this.logger.debug(
-          `[HandlerRegistry] in-flight message ignored for "${eventType}" (requestId: ${event.requestId})`,
-        );
+        this.logger.debug("[HandlerRegistry] In-flight message ignored", {
+          eventType,
+          requestId: event.requestId,
+        });
         return;
       }
 
-      this.logger.debug(
-        `[HandlerRegistry] handleMessage("${eventType}") entries=${entries.size}`,
+      // Apply filters — only execute entries whose filter passes (or has no filter)
+      const eligibleEntries = Array.from(entries).filter(
+        (entry) => !entry.filter || entry.filter(event.payload),
       );
+
+      if (eligibleEntries.length === 0) {
+        this.logger.debug("[HandlerRegistry] All handlers filtered out", {
+          eventType,
+          requestId: event.requestId,
+          totalEntries: entries.size,
+        });
+        return;
+      }
+
+      this.logger.debug("[HandlerRegistry] handleMessage", {
+        eventType,
+        requestId: event.requestId,
+        entries: eligibleEntries.length,
+      });
 
       if (trackMetrics) {
         await this.redis.incrementCache(`synkro:metrics:${eventType}:received`, this.metricsTtl);
       }
 
       const results = await Promise.allSettled(
-        Array.from(entries).map((entry) =>
+        eligibleEntries.map((entry) =>
           this.executeHandler(eventType, entry, event),
         ),
       );
@@ -267,16 +294,40 @@ export class HandlerRegistry {
         payload: event.payload,
       };
 
-      if (!allSucceeded) {
-        eventPayload.errors = results
-          .filter((r): r is PromiseRejectedResult => r.status === "rejected")
-          .map((r) => serializeError(r.reason));
+      const errors = !allSucceeded
+        ? results
+            .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+            .map((r) => serializeError(r.reason))
+        : undefined;
+
+      if (errors) {
+        eventPayload.errors = errors;
       }
 
       await this.redis.publishMessage(
         `event:${eventType}:${allSucceeded ? "completed" : "failed"}`,
         JSON.stringify(eventPayload),
       );
+
+      // Push to dead letter queue on failure
+      if (!allSucceeded && this.dlqEnabled && trackMetrics) {
+        const dlqItem: DeadLetterItem = {
+          eventType,
+          requestId: event.requestId,
+          payload: event.payload,
+          errors: errors!,
+          failedAt: new Date().toISOString(),
+          attempts: Math.max(...eligibleEntries.map((e) => (e.retry?.maxRetries ?? 0) + 1)),
+        };
+        await this.redis.pushToList(
+          `synkro:dlq:${eventType}`,
+          JSON.stringify(dlqItem),
+        );
+        this.logger.debug("[HandlerRegistry] Event pushed to DLQ", {
+          eventType,
+          requestId: event.requestId,
+        });
+      }
 
       await this.redis.setCache(dedupeKey, "1", this.dedupTtl);
     } finally {
@@ -334,14 +385,22 @@ export class HandlerRegistry {
             entry.retry?.delayMs,
             entry.retry?.jitter,
           );
-          this.logger.warn(
-            `[HandlerRegistry] - Handler "${eventType}" failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`,
-          );
+          this.logger.warn("[HandlerRegistry] Handler failed, retrying", {
+            eventType,
+            requestId: event.requestId,
+            attempt: attempt + 1,
+            maxAttempts: maxRetries + 1,
+            delayMs: delay,
+          });
           await sleep(delay);
         } else {
-          this.logger.error(
-            `[HandlerRegistry] - Handler "${eventType}" failed after ${attempt + 1} attempt(s): ${error}`,
-          );
+          this.logger.error("[HandlerRegistry] Handler failed", {
+            eventType,
+            requestId: event.requestId,
+            attempt: attempt + 1,
+            maxAttempts: maxRetries + 1,
+            error: String(error),
+          });
           throw error;
         }
       }

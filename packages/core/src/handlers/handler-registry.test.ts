@@ -16,6 +16,9 @@ function createMockRedis(): RedisManager {
     setCache: vi.fn().mockResolvedValue(undefined),
     deleteCache: vi.fn(),
     incrementCache: vi.fn().mockResolvedValue(1),
+    pushToList: vi.fn().mockResolvedValue(undefined),
+    getListRange: vi.fn().mockResolvedValue([]),
+    deleteKey: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn(),
   } as unknown as RedisManager;
 }
@@ -749,6 +752,184 @@ describe("HandlerRegistry", () => {
 
     it("should return undefined for unregistered schema", () => {
       expect(registry.getSchema("unknown:event")).toBeUndefined();
+    });
+  });
+
+  describe("event filtering", () => {
+    it("should execute handler when filter returns true", async () => {
+      const handler = vi.fn();
+      const filter = (payload: unknown) => (payload as { priority: string }).priority === "high";
+      registry.register("order:created", handler, undefined, undefined, filter);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-filter-pass", payload: { priority: "high" } }));
+      await flushPromises();
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ payload: { priority: "high" } }),
+      );
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:order:created:completed",
+        expect.any(String),
+      );
+    });
+
+    it("should skip handler when filter returns false", async () => {
+      const handler = vi.fn();
+      const filter = (payload: unknown) => (payload as { priority: string }).priority === "high";
+      registry.register("order:created", handler, undefined, undefined, filter);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-filter-skip", payload: { priority: "low" } }));
+      await flushPromises();
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
+
+    it("should execute handler when no filter is provided", async () => {
+      const handler = vi.fn();
+      registry.register("order:created", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-no-filter", payload: { priority: "low" } }));
+      await flushPromises();
+
+      expect(handler).toHaveBeenCalled();
+    });
+
+    it("should execute only matching handlers when multiple handlers have different filters", async () => {
+      const highHandler = vi.fn();
+      const lowHandler = vi.fn();
+      const highFilter = (payload: unknown) => (payload as { priority: string }).priority === "high";
+      const lowFilter = (payload: unknown) => (payload as { priority: string }).priority === "low";
+
+      registry.register("order:created", highHandler, undefined, undefined, highFilter);
+      registry.register("order:created", lowHandler, undefined, undefined, lowFilter);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-partial-filter", payload: { priority: "high" } }));
+      await flushPromises();
+
+      expect(highHandler).toHaveBeenCalled();
+      expect(lowHandler).not.toHaveBeenCalled();
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "event:order:created:completed",
+        expect.any(String),
+      );
+    });
+
+    it("should not publish events or track metrics when all handlers are filtered out", async () => {
+      const handler = vi.fn();
+      const filter = () => false;
+      registry.register("order:created", handler, undefined, undefined, filter);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-all-filtered", payload: {} }));
+      await flushPromises();
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+      expect(mockRedis.incrementCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("dead letter queue", () => {
+    it("should push failed event to DLQ when dlqEnabled is true", async () => {
+      const dlqRedis = createMockRedis();
+      const dlqRegistry = new HandlerRegistry(dlqRedis, undefined, undefined, true);
+      dlqRegistry.setPublishFn(vi.fn().mockResolvedValue("id"));
+
+      const handler = vi.fn().mockRejectedValue(new Error("boom"));
+      dlqRegistry.register("user:created", handler);
+
+      const subscribeCall = vi.mocked(dlqRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-dlq", payload: { name: "Alice" } }));
+      await flushPromises();
+
+      expect(dlqRedis.pushToList).toHaveBeenCalledWith(
+        "synkro:dlq:user:created",
+        expect.any(String),
+      );
+
+      const dlqItem = JSON.parse(
+        vi.mocked(dlqRedis.pushToList).mock.calls[0]![1] as string,
+      );
+      expect(dlqItem).toMatchObject({
+        eventType: "user:created",
+        requestId: "req-dlq",
+        payload: { name: "Alice" },
+        errors: [{ message: "boom", name: "Error" }],
+        attempts: 1,
+      });
+      expect(dlqItem.failedAt).toBeDefined();
+    });
+
+    it("should not push to DLQ when dlqEnabled is false", async () => {
+      const handler = vi.fn().mockRejectedValue(new Error("boom"));
+      registry.register("user:created", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-no-dlq", payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.pushToList).not.toHaveBeenCalled();
+    });
+
+    it("should not push workflow events to DLQ", async () => {
+      const dlqRedis = createMockRedis();
+      const dlqRegistry = new HandlerRegistry(dlqRedis, undefined, undefined, true);
+      dlqRegistry.setPublishFn(vi.fn().mockResolvedValue("id"));
+
+      const handler = vi.fn().mockRejectedValue(new Error("boom"));
+      dlqRegistry.register("workflow:my-wf:step1", handler);
+
+      const subscribeCall = vi.mocked(dlqRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-wf-dlq", payload: {} }));
+      await flushPromises();
+
+      expect(dlqRedis.pushToList).not.toHaveBeenCalled();
+    });
+
+    it("should record correct attempt count with retries", async () => {
+      vi.useFakeTimers();
+      const dlqRedis = createMockRedis();
+      const dlqRegistry = new HandlerRegistry(dlqRedis, undefined, undefined, true);
+      dlqRegistry.setPublishFn(vi.fn().mockResolvedValue("id"));
+
+      const handler = vi.fn().mockRejectedValue(new Error("fail"));
+      dlqRegistry.register("user:created", handler, { maxRetries: 2, delayMs: 100 });
+
+      const subscribeCall = vi.mocked(dlqRedis.subscribeToChannel).mock.calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(JSON.stringify({ requestId: "req-retry-dlq", payload: {} }));
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(200);
+
+      const dlqItem = JSON.parse(
+        vi.mocked(dlqRedis.pushToList).mock.calls[0]![1] as string,
+      );
+      expect(dlqItem.attempts).toBe(3);
+
+      vi.useRealTimers();
     });
   });
 });

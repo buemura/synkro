@@ -4,8 +4,11 @@ export { OnEvent, OnWorkflowStep, executeHandler } from "./handlers/index.js";
 export type { ExecuteHandlerOptions, ExecuteHandlerResult } from "./handlers/index.js";
 export type { TransportManager } from "./transport/index.js";
 export type {
+  DeadLetterItem,
+  EventFilter,
   EventInfo,
   EventMetrics,
+  LogFormat,
   HandlerCtx,
   HandlerFunction,
   PublishFunction,
