@@ -43,9 +43,8 @@ Workflow state TTL is now configurable via `retention.stateTtl` in `SynkroOption
 ### ~~FT-01: Dead letter queue for failed events~~ ✅ Resolved in v0.16.0
 Opt-in `deadLetterQueue: true` persists failed events to `synkro:dlq:{eventType}` lists after retry exhaustion. New API methods: `getDeadLetterItems()`, `replayDeadLetterItem()`, `clearDeadLetterQueue()`. Transport interface extended with `pushToList`, `getListRange`, `deleteKey`.
 
-### FT-02: Scheduled and delayed event publishing
-**Starting points:** `packages/core/src/synkro.ts`, `packages/core/src/types.ts`, transport interfaces
-Support publishing events on a schedule or with a delay (e.g., `synkro.schedule("cleanup:run", "0 */6 * * *")` or `synkro.publishDelayed(event, payload, delay)`). Needed for retries, timeouts, reminders, and saga-style workflows.
+### ~~FT-02: Scheduled and delayed event publishing~~ ✅ Resolved in v0.18.0
+`synkro.publishDelayed(event, payload, delayMs)` publishes after a one-shot delay (setTimeout). `synkro.schedule(eventType, intervalMs, payload?)` creates recurring publishes (setInterval). `synkro.unschedule(scheduleId)` cancels a schedule. All timers are cleaned up on `stop()`. Active schedules are included in `introspect()`.
 
 ### ~~FT-03: Idempotency and deduplication support `[SEC]`~~ ✅ Resolved in v0.9.0 (TD-03)
 Transport-level message dedup added to `RedisManager` using bounded in-memory cache keyed by `channel + requestId`. Handler and workflow registries also have distributed Redis locks (`setCacheIfNotExists`) for cross-instance dedup. Remaining risk: replay attacks with forged `requestId` values — mitigated by event schema validation (IMP-04).
@@ -106,8 +105,8 @@ Versioned event types (`user:created:v2`) are now supported with automatic base-
 
 ## P3 - Low / Nice-to-have
 
-### IMP-03: Middleware / interceptor pipeline
-No way to add cross-cutting concerns (logging, tracing, auth, validation) without modifying each handler. A middleware chain on `HandlerRegistry` (e.g., `synkro.use(middleware)`) would be valuable.
+### ~~IMP-03: Middleware / interceptor pipeline~~ ✅ Resolved in v0.18.0
+`synkro.use(middleware)` registers Koa-style onion middlewares. `MiddlewareFunction` signature: `(ctx: MiddlewareCtx, next: () => Promise<void>) => Promise<void>`. Middlewares execute in registration order wrapping each handler. `MiddlewareCtx` extends `HandlerCtx` with `eventType`. Also supported via `SynkroOptions.middlewares` at startup. Works on both regular events and workflow steps.
 
 ### FT-05: Parallel workflow steps
 Currently workflows are strictly sequential (with branching). Support parallel step execution where multiple steps run concurrently and the workflow advances when all (or any) complete. E.g., `parallel: ["step-a", "step-b"]`.
@@ -115,8 +114,8 @@ Currently workflows are strictly sequential (with branching). Support parallel s
 ### FT-08: Event replay / history
 No event history or replay capability. Add an optional event store that records all published events with timestamps, enabling replay for debugging or recovery.
 
-### FT-10: Workflow visualization / DAG export
-Expose workflow definitions as a DAG structure (e.g., DOT format or JSON graph) for visualization in the UI dashboard. `introspect()` returns flat data but doesn't capture the branching graph.
+### ~~FT-10: Workflow visualization / DAG export~~ ✅ Resolved in v0.18.0
+`synkro.getWorkflowGraph(workflowName)` returns a `WorkflowGraph` with `nodes` (one per step with metadata) and `edges` (sequential "next", "onSuccess", "onFailure"). `introspect()` now includes a `graphs` array with all workflow DAGs. New exported types: `WorkflowGraph`, `WorkflowGraphNode`, `WorkflowGraphEdge`.
 
 ### FT-11: Multiple transport support (NATS, Kafka, RabbitMQ)
 The `TransportManager` interface is clean enough to support other message brokers. Adding NATS or Kafka transports would broaden adoption.

@@ -2,7 +2,15 @@ import { Logger } from "../logger.js";
 
 import type { HandlerRegistry } from "../handlers/handler-registry.js";
 import type { TransportManager } from "../transport/transport.js";
-import type { HandlerFunction, RetentionConfig, SynkroWorkflow, WorkflowInfo } from "../types.js";
+import type {
+  HandlerFunction,
+  RetentionConfig,
+  SynkroWorkflow,
+  WorkflowGraph,
+  WorkflowGraphEdge,
+  WorkflowGraphNode,
+  WorkflowInfo,
+} from "../types.js";
 
 export type WorkflowState = {
   workflowName: string;
@@ -58,6 +66,59 @@ export class WorkflowRegistry {
 
   get activeCount(): number {
     return this.processingLocks.size;
+  }
+
+  getWorkflowGraph(workflowName: string): WorkflowGraph | null {
+    const workflow = this.workflows.get(workflowName);
+    if (!workflow) return null;
+    return this.buildGraph(workflow);
+  }
+
+  getWorkflowGraphs(): WorkflowGraph[] {
+    return Array.from(this.workflows.values()).map((w) => this.buildGraph(w));
+  }
+
+  private buildGraph(workflow: SynkroWorkflow): WorkflowGraph {
+    const nodes: WorkflowGraphNode[] = workflow.steps.map((step) => ({
+      id: step.type,
+      type: "step" as const,
+      label: step.type,
+      ...(step.retry || step.timeoutMs
+        ? {
+            meta: {
+              ...(step.retry && { retry: step.retry }),
+              ...(step.timeoutMs && { timeoutMs: step.timeoutMs }),
+            },
+          }
+        : {}),
+    }));
+
+    const edges: WorkflowGraphEdge[] = [];
+    const targets = this.branchTargets.get(workflow.name);
+
+    for (let i = 0; i < workflow.steps.length; i++) {
+      const step = workflow.steps[i]!;
+
+      if (step.onSuccess) {
+        edges.push({ from: step.type, to: step.onSuccess, label: "onSuccess" });
+      }
+
+      if (step.onFailure) {
+        edges.push({ from: step.type, to: step.onFailure, label: "onFailure" });
+      }
+
+      // Sequential "next" edge — same logic as findNextStep (skip branch targets)
+      if (!step.onSuccess) {
+        for (let j = i + 1; j < workflow.steps.length; j++) {
+          if (!targets?.has(workflow.steps[j]!.type)) {
+            edges.push({ from: step.type, to: workflow.steps[j]!.type, label: "next" });
+            break;
+          }
+        }
+      }
+    }
+
+    return { workflowName: workflow.name, nodes, edges };
   }
 
   getRegisteredWorkflows(): WorkflowInfo[] {

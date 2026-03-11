@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Synkro, OnEvent, OnWorkflowStep } from "../index.js";
-import type { HandlerCtx, SynkroEvent, SynkroWorkflow } from "../index.js";
+import type { HandlerCtx, MiddlewareFunction, SynkroEvent, SynkroWorkflow } from "../index.js";
 
 /**
  * Flush microtask and macrotask queues so the in-memory transport
@@ -754,6 +754,390 @@ describe("Integration", () => {
       expect(baseMetrics.completed).toBe(1);
       expect(versionedMetrics.received).toBe(1);
       expect(versionedMetrics.completed).toBe(1);
+    });
+  });
+
+  // ───────────────────────────── Middleware ─────────────────────────────
+
+  describe("middleware", () => {
+    it("should invoke middleware around handler execution", async () => {
+      const order: string[] = [];
+
+      const mw: MiddlewareFunction = async (_ctx, next) => {
+        order.push("mw-before");
+        await next();
+        order.push("mw-after");
+      };
+
+      synkro = await startInMemory({
+        middlewares: [mw],
+        events: [
+          {
+            type: "mw:test",
+            handler: () => {
+              order.push("handler");
+            },
+          },
+        ],
+      });
+
+      await synkro.publish("mw:test", {});
+      await settle();
+
+      expect(order).toEqual(["mw-before", "handler", "mw-after"]);
+    });
+
+    it("should execute multiple middlewares in registration order", async () => {
+      const order: string[] = [];
+
+      synkro = await startInMemory({
+        events: [
+          {
+            type: "mw:multi",
+            handler: () => {
+              order.push("handler");
+            },
+          },
+        ],
+      });
+
+      synkro.use(async (_ctx, next) => {
+        order.push("mw1-before");
+        await next();
+        order.push("mw1-after");
+      });
+
+      synkro.use(async (_ctx, next) => {
+        order.push("mw2-before");
+        await next();
+        order.push("mw2-after");
+      });
+
+      await synkro.publish("mw:multi", {});
+      await settle();
+
+      expect(order).toEqual([
+        "mw1-before",
+        "mw2-before",
+        "handler",
+        "mw2-after",
+        "mw1-after",
+      ]);
+    });
+
+    it("should apply middleware independently to each handler for the same event", async () => {
+      const calls: string[] = [];
+
+      const mw: MiddlewareFunction = async (ctx, next) => {
+        calls.push(`mw:${ctx.eventType}`);
+        await next();
+      };
+
+      synkro = await startInMemory({
+        middlewares: [mw],
+        events: [
+          {
+            type: "mw:each",
+            handler: () => {
+              calls.push("handler-1");
+            },
+          },
+          {
+            type: "mw:each",
+            handler: () => {
+              calls.push("handler-2");
+            },
+          },
+        ],
+      });
+
+      await synkro.publish("mw:each", {});
+      await settle();
+
+      expect(calls.filter((c) => c === "mw:mw:each")).toHaveLength(2);
+      expect(calls).toContain("handler-1");
+      expect(calls).toContain("handler-2");
+    });
+
+    it("should provide eventType in middleware context", async () => {
+      let capturedEventType: string | undefined;
+
+      const mw: MiddlewareFunction = async (ctx, next) => {
+        capturedEventType = ctx.eventType;
+        await next();
+      };
+
+      synkro = await startInMemory({
+        middlewares: [mw],
+        events: [{ type: "mw:ctx", handler: () => {} }],
+      });
+
+      await synkro.publish("mw:ctx", {});
+      await settle();
+
+      expect(capturedEventType).toBe("mw:ctx");
+    });
+  });
+
+  // ───────────────────────────── Scheduled & Delayed Events ─────────────────────────────
+
+  describe("scheduled and delayed events", () => {
+    it("should deliver a delayed event after the specified delay", async () => {
+      vi.useFakeTimers();
+      const received: unknown[] = [];
+
+      synkro = await startInMemory({
+        events: [
+          {
+            type: "delayed:event",
+            handler: (ctx) => {
+              received.push(ctx.payload);
+            },
+          },
+        ],
+      });
+
+      const requestId = synkro.publishDelayed("delayed:event", { a: 1 }, 3000);
+      expect(typeof requestId).toBe("string");
+      expect(received).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(3000);
+      // settle microtasks with fake timers
+      for (let i = 0; i < 30; i++) {
+        await vi.advanceTimersByTimeAsync(0);
+      }
+
+      expect(received).toHaveLength(1);
+      expect(received[0]).toEqual({ a: 1 });
+
+      vi.useRealTimers();
+    });
+
+    it("should deliver recurring events on schedule", async () => {
+      vi.useFakeTimers();
+      const received: unknown[] = [];
+
+      synkro = await startInMemory({
+        events: [
+          {
+            type: "recurring:event",
+            handler: (ctx) => {
+              received.push(ctx.payload);
+            },
+          },
+        ],
+      });
+
+      const scheduleId = synkro.schedule("recurring:event", 1000, { tick: true });
+      expect(typeof scheduleId).toBe("string");
+
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(1000);
+        for (let j = 0; j < 30; j++) {
+          await vi.advanceTimersByTimeAsync(0);
+        }
+      }
+
+      expect(received.length).toBeGreaterThanOrEqual(3);
+
+      synkro.unschedule(scheduleId);
+      vi.useRealTimers();
+    });
+
+    it("should stop recurring events after unschedule", async () => {
+      vi.useFakeTimers();
+      let count = 0;
+
+      synkro = await startInMemory({
+        events: [
+          {
+            type: "unsched:event",
+            handler: () => {
+              count++;
+            },
+          },
+        ],
+      });
+
+      const id = synkro.schedule("unsched:event", 1000);
+
+      await vi.advanceTimersByTimeAsync(2000);
+      for (let j = 0; j < 30; j++) {
+        await vi.advanceTimersByTimeAsync(0);
+      }
+
+      const countBefore = count;
+      synkro.unschedule(id);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      for (let j = 0; j < 30; j++) {
+        await vi.advanceTimersByTimeAsync(0);
+      }
+
+      expect(count).toBe(countBefore);
+
+      vi.useRealTimers();
+    });
+
+    it("should include active schedules in introspect()", async () => {
+      synkro = await startInMemory({});
+
+      synkro.schedule("sched:a", 5000, { job: "a" });
+      synkro.schedule("sched:b", 10000);
+
+      const info = synkro.introspect();
+      expect(info.schedules).toHaveLength(2);
+      expect(info.schedules.map((s) => s.eventType).sort()).toEqual(["sched:a", "sched:b"]);
+    });
+
+    it("should clear all timers on stop()", async () => {
+      vi.useFakeTimers();
+      let count = 0;
+
+      synkro = await startInMemory({
+        events: [{ type: "stop:event", handler: () => { count++; } }],
+      });
+
+      synkro.schedule("stop:event", 1000);
+      synkro.publishDelayed("stop:event", {}, 2000);
+
+      await synkro.stop();
+
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(count).toBe(0);
+
+      vi.useRealTimers();
+    });
+  });
+
+  // ───────────────────────────── Workflow DAG Export ─────────────────────────────
+
+  describe("workflow DAG export", () => {
+    it("should return null for unknown workflow", async () => {
+      synkro = await startInMemory({});
+      expect(synkro.getWorkflowGraph("unknown")).toBeNull();
+    });
+
+    it("should return graph for a linear workflow", async () => {
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "linear",
+            steps: [
+              { type: "A", handler: () => {} },
+              { type: "B", handler: () => {} },
+              { type: "C", handler: () => {} },
+            ],
+          },
+        ],
+      });
+
+      const graph = synkro.getWorkflowGraph("linear");
+      expect(graph).not.toBeNull();
+      expect(graph!.workflowName).toBe("linear");
+      expect(graph!.nodes).toHaveLength(3);
+      expect(graph!.nodes.map((n) => n.id)).toEqual(["A", "B", "C"]);
+
+      // Sequential edges: A→B, B→C
+      const nextEdges = graph!.edges.filter((e) => e.label === "next");
+      expect(nextEdges).toEqual([
+        { from: "A", to: "B", label: "next" },
+        { from: "B", to: "C", label: "next" },
+      ]);
+    });
+
+    it("should return graph for a branching workflow", async () => {
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "branching",
+            steps: [
+              {
+                type: "Validate",
+                handler: () => {},
+                onSuccess: "Process",
+                onFailure: "Reject",
+              },
+              { type: "Process", handler: () => {} },
+              { type: "Reject", handler: () => {} },
+            ],
+          },
+        ],
+      });
+
+      const graph = synkro.getWorkflowGraph("branching");
+      expect(graph!.nodes).toHaveLength(3);
+
+      const onSuccessEdges = graph!.edges.filter((e) => e.label === "onSuccess");
+      const onFailureEdges = graph!.edges.filter((e) => e.label === "onFailure");
+
+      expect(onSuccessEdges).toEqual([{ from: "Validate", to: "Process", label: "onSuccess" }]);
+      expect(onFailureEdges).toEqual([{ from: "Validate", to: "Reject", label: "onFailure" }]);
+
+      // No "next" edge from Validate since it has onSuccess
+      const nextFromValidate = graph!.edges.filter((e) => e.from === "Validate" && e.label === "next");
+      expect(nextFromValidate).toHaveLength(0);
+    });
+
+    it("should include step metadata in nodes", async () => {
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "with-meta",
+            steps: [
+              {
+                type: "StepA",
+                handler: () => {},
+                retry: { maxRetries: 3 },
+                timeoutMs: 5000,
+              },
+            ],
+          },
+        ],
+      });
+
+      const graph = synkro.getWorkflowGraph("with-meta");
+      expect(graph!.nodes[0]!.meta).toEqual({
+        retry: { maxRetries: 3 },
+        timeoutMs: 5000,
+      });
+    });
+
+    it("should include graphs in introspect()", async () => {
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "wf-1",
+            steps: [{ type: "S1", handler: () => {} }],
+          },
+          {
+            name: "wf-2",
+            steps: [
+              { type: "S1", handler: () => {} },
+              { type: "S2", handler: () => {} },
+            ],
+          },
+        ],
+      });
+
+      const info = synkro.introspect();
+      expect(info.graphs).toHaveLength(2);
+      expect(info.graphs.map((g) => g.workflowName).sort()).toEqual(["wf-1", "wf-2"]);
+    });
+
+    it("should handle single-step workflow", async () => {
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "single",
+            steps: [{ type: "Only", handler: () => {} }],
+          },
+        ],
+      });
+
+      const graph = synkro.getWorkflowGraph("single");
+      expect(graph!.nodes).toHaveLength(1);
+      expect(graph!.edges).toHaveLength(0);
     });
   });
 });

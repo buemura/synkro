@@ -70,6 +70,7 @@ export type SynkroOptions = {
   schemas?: Record<string, SchemaValidator>;
   drainTimeout?: number;
   deadLetterQueue?: boolean;
+  middlewares?: MiddlewareFunction[];
 };
 
 export type PublishFunction = (
@@ -112,6 +113,8 @@ export type WorkflowInfo = {
 export type SynkroIntrospection = {
   events: EventInfo[];
   workflows: WorkflowInfo[];
+  schedules: ScheduleInfo[];
+  graphs: WorkflowGraph[];
 };
 
 export type EventMetrics = {
@@ -119,4 +122,40 @@ export type EventMetrics = {
   received: number;
   completed: number;
   failed: number;
+};
+
+export type MiddlewareCtx<T = unknown> = HandlerCtx<T> & {
+  eventType: string;
+};
+
+export type MiddlewareFunction = (
+  ctx: MiddlewareCtx,
+  next: () => Promise<void>,
+) => Promise<void>;
+
+export type ScheduleInfo = {
+  scheduleId: string;
+  eventType: string;
+  intervalMs: number;
+  payload?: unknown;
+  createdAt: string;
+};
+
+export type WorkflowGraphNode = {
+  id: string;
+  type: "step";
+  label: string;
+  meta?: { retry?: RetryConfig; timeoutMs?: number };
+};
+
+export type WorkflowGraphEdge = {
+  from: string;
+  to: string;
+  label: "next" | "onSuccess" | "onFailure";
+};
+
+export type WorkflowGraph = {
+  workflowName: string;
+  nodes: WorkflowGraphNode[];
+  edges: WorkflowGraphEdge[];
 };

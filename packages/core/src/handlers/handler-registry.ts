@@ -1,6 +1,8 @@
 import { Logger } from "../logger.js";
 
 import type { TransportManager } from "../transport/transport.js";
+import { composeMiddleware } from "../middleware.js";
+
 import type {
   DeadLetterItem,
   EventFilter,
@@ -8,6 +10,7 @@ import type {
   EventMetrics,
   HandlerCtx,
   HandlerFunction,
+  MiddlewareFunction,
   PublishFunction,
   RetentionConfig,
   RetryBackoffStrategy,
@@ -60,6 +63,7 @@ export class HandlerRegistry {
   private subscribedChannels = new Set<string>();
   private schemas = new Map<string, SchemaValidator>();
 
+  private middlewares: MiddlewareFunction[] = [];
   private publishFn: PublishFunction | null = null;
   private readonly lockTtl: number;
   private readonly dedupTtl: number;
@@ -82,6 +86,10 @@ export class HandlerRegistry {
 
   setPublishFn(fn: PublishFunction): void {
     this.publishFn = fn;
+  }
+
+  setMiddlewares(middlewares: MiddlewareFunction[]): void {
+    this.middlewares = middlewares;
   }
 
   registerSchema(eventType: string, schema: SchemaValidator): void {
@@ -369,9 +377,13 @@ export class HandlerRegistry {
       entry.schema(event.payload);
     }
 
+    const runHandler = this.middlewares.length > 0
+      ? () => composeMiddleware(this.middlewares)({ ...ctx, eventType }, async () => { await entry.handler(ctx); })
+      : async () => { await entry.handler(ctx); };
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        await entry.handler(ctx);
+        await runHandler();
         return;
       } catch (error) {
         const isRetryable = entry.retry?.retryable

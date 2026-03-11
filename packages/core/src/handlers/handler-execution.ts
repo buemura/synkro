@@ -1,11 +1,14 @@
 import { Logger } from "../logger.js";
 
 import type { TransportManager } from "../transport/transport.js";
+import { composeMiddleware } from "../middleware.js";
+
 import type {
   DeadLetterItem,
   EventFilter,
   HandlerCtx,
   HandlerFunction,
+  MiddlewareFunction,
   PublishFunction,
   RetentionConfig,
   RetryBackoffStrategy,
@@ -30,6 +33,7 @@ export type ExecuteHandlerOptions = {
   retention?: RetentionConfig;
   trackMetrics?: boolean;
   dlqEnabled?: boolean;
+  middlewares?: MiddlewareFunction[];
   logger?: Logger;
 };
 
@@ -158,9 +162,13 @@ export async function executeHandler(options: ExecuteHandlerOptions): Promise<Ex
     const maxRetries = retry?.maxRetries ?? 0;
     let lastError: unknown;
 
+    const runHandler = options.middlewares && options.middlewares.length > 0
+      ? () => composeMiddleware(options.middlewares!)({ ...ctx, eventType }, async () => { await handler(ctx); })
+      : async () => { await handler(ctx); };
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        await handler(ctx);
+        await runHandler();
         lastError = undefined;
         break;
       } catch (error) {

@@ -7,6 +7,7 @@ import {
 } from "./handlers/index.js";
 import { InMemoryManager, RedisManager } from "./transport/index.js";
 import { Logger, setDebug } from "./logger.js";
+import { Scheduler } from "./scheduler.js";
 import { WorkflowRegistry } from "./workflows/index.js";
 
 import { parseEventType } from "./versioning.js";
@@ -17,12 +18,14 @@ import type {
   EventMetrics,
   HandlerFunction,
   LogFormat,
+  MiddlewareFunction,
   RetentionConfig,
   RetryConfig,
   SchemaValidator,
   SynkroIntrospection,
   SynkroOptions,
   SynkroWorkflow,
+  WorkflowGraph,
 } from "./types.js";
 import type { TransportManager } from "./transport/index.js";
 import type { WorkflowState } from "./workflows/workflow-registry.js";
@@ -34,8 +37,10 @@ export class Synkro {
   private transport: TransportManager;
   private handlerRegistry: HandlerRegistry;
   private workflowRegistry: WorkflowRegistry;
+  private scheduler: Scheduler;
   private logger: Logger;
   private readonly drainTimeout: number;
+  private middlewares: MiddlewareFunction[] = [];
 
   private constructor(transport: TransportManager, logger: Logger, retention?: RetentionConfig, drainTimeout?: number, dlqEnabled?: boolean) {
     this.transport = transport;
@@ -44,6 +49,7 @@ export class Synkro {
     this.handlerRegistry = new HandlerRegistry(transport, retention, this.logger, dlqEnabled ?? false);
     this.workflowRegistry = new WorkflowRegistry(transport, this.handlerRegistry, retention, this.logger);
     this.handlerRegistry.setPublishFn(this.publish.bind(this));
+    this.scheduler = new Scheduler(this.publish.bind(this));
   }
 
   static async start(options: SynkroOptions): Promise<Synkro> {
@@ -90,6 +96,11 @@ export class Synkro {
       instance.workflowRegistry.registerWorkflows(workflows);
     }
 
+    // Register middlewares
+    for (const mw of options.middlewares ?? []) {
+      instance.use(mw);
+    }
+
     // Register decorated event handlers
     for (const handlerInstance of options.handlers ?? []) {
       for (const { eventType, handler, retry } of discoverEventHandlers(handlerInstance)) {
@@ -118,6 +129,23 @@ export class Synkro {
 
   off(eventType: string, handler?: HandlerFunction): void {
     this.handlerRegistry.unregister(eventType, handler);
+  }
+
+  use(middleware: MiddlewareFunction): void {
+    this.middlewares.push(middleware);
+    this.handlerRegistry.setMiddlewares(this.middlewares);
+  }
+
+  publishDelayed(event: string, payload: unknown, delayMs: number): string {
+    return this.scheduler.publishDelayed(event, payload, delayMs);
+  }
+
+  schedule(eventType: string, intervalMs: number, payload?: unknown): string {
+    return this.scheduler.schedule(eventType, intervalMs, payload);
+  }
+
+  unschedule(scheduleId: string): boolean {
+    return this.scheduler.unschedule(scheduleId);
   }
 
   async publish(
@@ -177,14 +205,21 @@ export class Synkro {
     await this.transport.deleteKey(`synkro:dlq:${eventType}`);
   }
 
+  getWorkflowGraph(workflowName: string): WorkflowGraph | null {
+    return this.workflowRegistry.getWorkflowGraph(workflowName);
+  }
+
   introspect(): SynkroIntrospection {
     return {
       events: this.handlerRegistry.getRegisteredEvents(),
       workflows: this.workflowRegistry.getRegisteredWorkflows(),
+      schedules: this.scheduler.getActiveSchedules(),
+      graphs: this.workflowRegistry.getWorkflowGraphs(),
     };
   }
 
   async stop(): Promise<void> {
+    this.scheduler.clearAll();
     const deadline = Date.now() + this.drainTimeout;
 
     while (

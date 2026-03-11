@@ -326,6 +326,7 @@ type SynkroOptions = {
   retention?: RetentionConfig;
   schemas?: Record<string, SchemaValidator>; // global payload validators per event type
   drainTimeout?: number; // ms to wait for in-flight handlers on stop() (default: 5000)
+  middlewares?: MiddlewareFunction[]; // middleware chain applied to all handlers
 };
 ```
 
@@ -409,9 +410,55 @@ Cancels a running workflow. Returns `true` if the workflow was cancelled, `false
 const cancelled = await synkro.cancelWorkflow(requestId, "ProcessOrder");
 ```
 
+### `synkro.use(middleware): void`
+
+Registers a middleware function that wraps every handler execution. Middlewares execute in registration order using the Koa-style onion model.
+
+```ts
+synkro.use(async (ctx, next) => {
+  console.log(`[${ctx.eventType}] started`, ctx.requestId);
+  const start = Date.now();
+  await next();
+  console.log(`[${ctx.eventType}] finished in ${Date.now() - start}ms`);
+});
+```
+
+### `synkro.publishDelayed(event, payload, delayMs): string`
+
+Publishes an event after a one-shot delay. Returns the `requestId` immediately.
+
+```ts
+const requestId = synkro.publishDelayed("reminder:send", { userId: "u1" }, 60_000);
+```
+
+### `synkro.schedule(eventType, intervalMs, payload?): string`
+
+Creates a recurring event publish on a fixed interval. Returns a `scheduleId`.
+
+```ts
+const scheduleId = synkro.schedule("cleanup:run", 6 * 60 * 60 * 1000, { scope: "all" });
+```
+
+### `synkro.unschedule(scheduleId): boolean`
+
+Cancels a scheduled recurring publish. Returns `true` if the schedule was found and cancelled.
+
+```ts
+synkro.unschedule(scheduleId);
+```
+
+### `synkro.getWorkflowGraph(workflowName): WorkflowGraph | null`
+
+Returns the workflow definition as a directed graph with nodes and edges, or `null` if the workflow is not registered.
+
+```ts
+const graph = synkro.getWorkflowGraph("ProcessOrder");
+// { workflowName: "ProcessOrder", nodes: [...], edges: [...] }
+```
+
 ### `synkro.stop(): Promise<void>`
 
-Gracefully shuts down. Waits for in-flight handlers to complete (up to `drainTimeout`), then disconnects the transport.
+Gracefully shuts down. Clears all scheduled timers, waits for in-flight handlers to complete (up to `drainTimeout`), then disconnects the transport.
 
 ## Types
 
@@ -470,6 +517,42 @@ type WorkflowState = {
   workflowName: string;
   currentStep: number;
   status: "running" | "completed" | "failed" | "cancelled";
+};
+
+type MiddlewareCtx<T = unknown> = HandlerCtx<T> & {
+  eventType: string;
+};
+
+type MiddlewareFunction = (
+  ctx: MiddlewareCtx,
+  next: () => Promise<void>,
+) => Promise<void>;
+
+type ScheduleInfo = {
+  scheduleId: string;
+  eventType: string;
+  intervalMs: number;
+  payload?: unknown;
+  createdAt: string;
+};
+
+type WorkflowGraph = {
+  workflowName: string;
+  nodes: WorkflowGraphNode[];
+  edges: WorkflowGraphEdge[];
+};
+
+type WorkflowGraphNode = {
+  id: string;
+  type: "step";
+  label: string;
+  meta?: { retry?: RetryConfig; timeoutMs?: number };
+};
+
+type WorkflowGraphEdge = {
+  from: string;
+  to: string;
+  label: "next" | "onSuccess" | "onFailure";
 };
 ```
 
