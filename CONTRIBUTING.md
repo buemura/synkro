@@ -120,4 +120,4 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/) for commi
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [ISC License](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

@@ -230,4 +230,4 @@ pnpm type-check
 
 ## License
 
-[ISC](./LICENSE) © [buemura](https://github.com/buemura)
+[MIT](./LICENSE) © [buemura](https://github.com/buemura)

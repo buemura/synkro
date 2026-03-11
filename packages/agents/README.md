@@ -331,4 +331,4 @@ type AgentContext = HandlerCtx & {
 
 ## License
 
-ISC
+MIT

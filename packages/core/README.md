@@ -558,4 +558,4 @@ type WorkflowGraphEdge = {
 
 ## License
 
-ISC
+MIT

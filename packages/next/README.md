@@ -128,4 +128,4 @@ export default nextConfig;
 
 ## License
 
-ISC
+MIT

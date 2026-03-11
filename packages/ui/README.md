@@ -100,4 +100,4 @@ Returns a standard Node.js HTTP request handler `(IncomingMessage, ServerRespons
 
 ## License
 
-ISC
+MIT

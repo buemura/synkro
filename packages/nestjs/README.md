@@ -181,4 +181,4 @@ SynkroModule.forRoot({
 
 ## License
 
-ISC
+MIT
