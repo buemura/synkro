@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { HandlerCtx, HandlerFunction } from "@synkro/core";
+import type { AgentRegistry } from "./agent-registry.js";
 import type { ModelProvider } from "./llm/provider.js";
 import type { Message, ModelOptions, TokenUsage, ToolDefinition } from "./llm/types.js";
 import type { AgentMemory } from "./memory/memory.js";
@@ -23,6 +24,7 @@ export class Agent {
   private readonly maxIterations: number;
   private readonly tokenBudget: number | undefined;
   private readonly onTokenUsage: ((usage: TokenUsage) => void) | undefined;
+  private readonly registry: AgentRegistry | undefined;
 
   constructor(config: AgentConfig) {
     this.name = config.name;
@@ -34,6 +36,7 @@ export class Agent {
     this.maxIterations = config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
     this.tokenBudget = config.tokenBudget;
     this.onTokenUsage = config.onTokenUsage;
+    this.registry = config.registry;
 
     this.toolRegistry = new ToolRegistry();
     if (config.tools) {
@@ -68,8 +71,8 @@ export class Agent {
       modelOptions.tools = toolDefs;
     }
 
-    // Build a minimal AgentContext for tool execution
-    const ctx = this.buildContext(runId, options?.payload, totalUsage);
+    // Build AgentContext for tool execution (with live synkro context when available)
+    const ctx = this.buildContext(runId, options?.payload, totalUsage, options?.synkroCtx);
 
     let iterations = 0;
 
@@ -163,6 +166,7 @@ export class Agent {
       const result = await this.run(input, {
         requestId: ctx.requestId,
         payload: ctx.payload,
+        synkroCtx: ctx,
       });
 
       ctx.setPayload({
@@ -178,15 +182,39 @@ export class Agent {
     runId: string,
     payload: unknown,
     tokenUsage: TokenUsage,
+    synkroCtx?: HandlerCtx,
   ): AgentContext {
+    const registry = this.registry;
+
+    const delegate = async (agentName: string, input: string): Promise<AgentRunResult> => {
+      if (!registry) {
+        throw new Error("Cannot delegate: no agent registry configured");
+      }
+      const target = registry.get(agentName);
+      if (!target) {
+        throw new Error(`Cannot delegate: agent "${agentName}" not found in registry`);
+      }
+      const result = await target.run(input, {
+        requestId: runId,
+        payload,
+        synkroCtx,
+      });
+      // Accumulate delegated token usage into parent
+      tokenUsage.promptTokens += result.tokenUsage.promptTokens;
+      tokenUsage.completionTokens += result.tokenUsage.completionTokens;
+      tokenUsage.totalTokens += result.tokenUsage.totalTokens;
+      return result;
+    };
+
     return {
-      requestId: runId,
-      payload: payload ?? {},
-      publish: async () => runId,
-      setPayload: () => {},
+      requestId: synkroCtx?.requestId ?? runId,
+      payload: synkroCtx?.payload ?? payload ?? {},
+      publish: synkroCtx?.publish ?? (async () => runId),
+      setPayload: synkroCtx?.setPayload ?? (() => {}),
       agentName: this.name,
       runId,
       tokenUsage,
+      delegate,
     };
   }
 

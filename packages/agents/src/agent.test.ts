@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { Agent } from "./agent.js";
+import { AgentRegistry } from "./agent-registry.js";
 import type { ModelProvider } from "./llm/provider.js";
 import type { Message, ModelOptions, ModelResponse } from "./llm/types.js";
 import type { Tool } from "./tools/types.js";
+import type { AgentContext } from "./types.js";
 
 function createMockProvider(
   responses: ModelResponse[],
@@ -333,6 +335,261 @@ describe("Agent", () => {
       const messages = chatFn.mock.calls[0]![0] as Message[];
       const userMsg = messages.find((m) => m.role === "user");
       expect(userMsg!.content).toBe('{"data":42}');
+    });
+
+    it("should pass live publish to tools via asHandler", async () => {
+      const publishSpy = vi.fn(async () => "pub-id");
+
+      const publishTool: Tool = {
+        name: "emit",
+        description: "Emits an event",
+        parameters: { type: "object", properties: {} },
+        execute: async (_input: unknown, ctx: AgentContext) => {
+          await ctx.publish("order:updated", { orderId: "123" });
+          return "emitted";
+        },
+      };
+
+      const provider = createMockProvider([
+        {
+          content: "",
+          toolCalls: [{ id: "tc-1", name: "emit", arguments: "{}" }],
+          usage: USAGE,
+          finishReason: "tool_calls",
+        },
+        { content: "Done", usage: USAGE, finishReason: "stop" },
+      ]);
+
+      const agent = new Agent({
+        name: "publish-agent",
+        systemPrompt: "Test.",
+        provider,
+        model: { model: "test-model" },
+        tools: [publishTool],
+      });
+
+      const handler = agent.asHandler();
+
+      await handler({
+        requestId: "req-789",
+        payload: { input: "emit event" },
+        publish: publishSpy,
+        setPayload: vi.fn(),
+      });
+
+      expect(publishSpy).toHaveBeenCalledWith("order:updated", { orderId: "123" });
+    });
+
+    it("should keep no-op stubs in standalone run", async () => {
+      let capturedPublish: ((event: string) => Promise<string>) | undefined;
+
+      const captureTool: Tool = {
+        name: "capture",
+        description: "Captures context",
+        parameters: { type: "object", properties: {} },
+        execute: async (_input: unknown, ctx: AgentContext) => {
+          capturedPublish = ctx.publish;
+          return "captured";
+        },
+      };
+
+      const provider = createMockProvider([
+        {
+          content: "",
+          toolCalls: [{ id: "tc-1", name: "capture", arguments: "{}" }],
+          usage: USAGE,
+          finishReason: "tool_calls",
+        },
+        { content: "Done", usage: USAGE, finishReason: "stop" },
+      ]);
+
+      const agent = new Agent({
+        name: "standalone-agent",
+        systemPrompt: "Test.",
+        provider,
+        model: { model: "test-model" },
+        tools: [captureTool],
+      });
+
+      const result = await agent.run("test");
+
+      expect(result.status).toBe("completed");
+      // Standalone publish returns runId (no-op stub), not empty string
+      const pubResult = await capturedPublish!("some:event");
+      expect(typeof pubResult).toBe("string");
+      expect(pubResult).toBe(result.runId);
+    });
+  });
+
+  describe("delegate", () => {
+    it("should delegate to another agent via registry", async () => {
+      const registry = new AgentRegistry();
+
+      const providerB = createMockProvider([
+        { content: "Response from B", usage: USAGE, finishReason: "stop" },
+      ]);
+      const agentB = new Agent({
+        name: "agent-b",
+        systemPrompt: "You are agent B.",
+        provider: providerB,
+        model: { model: "test-model" },
+        registry,
+      });
+      registry.register(agentB);
+
+      const delegateTool: Tool = {
+        name: "delegate_tool",
+        description: "Delegates to agent B",
+        parameters: { type: "object", properties: {} },
+        execute: async (_input: unknown, ctx: AgentContext) => {
+          const result = await ctx.delegate("agent-b", "hello from A");
+          return result.output;
+        },
+      };
+
+      const providerA = createMockProvider([
+        {
+          content: "",
+          toolCalls: [{ id: "tc-1", name: "delegate_tool", arguments: "{}" }],
+          usage: USAGE,
+          finishReason: "tool_calls",
+        },
+        { content: "A got: Response from B", usage: USAGE, finishReason: "stop" },
+      ]);
+      const agentA = new Agent({
+        name: "agent-a",
+        systemPrompt: "You are agent A.",
+        provider: providerA,
+        model: { model: "test-model" },
+        tools: [delegateTool],
+        registry,
+      });
+      registry.register(agentA);
+
+      const result = await agentA.run("delegate to B");
+
+      expect(result.status).toBe("completed");
+      expect(result.output).toBe("A got: Response from B");
+    });
+
+    it("should accumulate delegated token usage into parent", async () => {
+      const registry = new AgentRegistry();
+      const bigUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+
+      const providerB = createMockProvider([
+        { content: "B result", usage: bigUsage, finishReason: "stop" },
+      ]);
+      const agentB = new Agent({
+        name: "agent-b",
+        systemPrompt: "B",
+        provider: providerB,
+        model: { model: "test-model" },
+        registry,
+      });
+      registry.register(agentB);
+
+      const delegateTool: Tool = {
+        name: "delegate_tool",
+        description: "Delegates",
+        parameters: { type: "object", properties: {} },
+        execute: async (_input: unknown, ctx: AgentContext) => {
+          await ctx.delegate("agent-b", "work");
+          return "done";
+        },
+      };
+
+      const providerA = createMockProvider([
+        {
+          content: "",
+          toolCalls: [{ id: "tc-1", name: "delegate_tool", arguments: "{}" }],
+          usage: USAGE,
+          finishReason: "tool_calls",
+        },
+        { content: "Final", usage: USAGE, finishReason: "stop" },
+      ]);
+      const agentA = new Agent({
+        name: "agent-a",
+        systemPrompt: "A",
+        provider: providerA,
+        model: { model: "test-model" },
+        tools: [delegateTool],
+        registry,
+      });
+      registry.register(agentA);
+
+      const result = await agentA.run("go");
+
+      // Parent tokens (15 + 15) + delegated (150) = 180
+      expect(result.tokenUsage.totalTokens).toBe(180);
+    });
+
+    it("should throw when delegating to unknown agent", async () => {
+      const registry = new AgentRegistry();
+
+      const delegateTool: Tool = {
+        name: "delegate_tool",
+        description: "Delegates to unknown",
+        parameters: { type: "object", properties: {} },
+        execute: async (_input: unknown, ctx: AgentContext) => {
+          await ctx.delegate("nonexistent", "hello");
+          return "done";
+        },
+      };
+
+      const provider = createMockProvider([
+        {
+          content: "",
+          toolCalls: [{ id: "tc-1", name: "delegate_tool", arguments: "{}" }],
+          usage: USAGE,
+          finishReason: "tool_calls",
+        },
+        { content: "Error handled", usage: USAGE, finishReason: "stop" },
+      ]);
+      const agent = new Agent({
+        name: "agent-a",
+        systemPrompt: "A",
+        provider,
+        model: { model: "test-model" },
+        tools: [delegateTool],
+        registry,
+      });
+
+      const result = await agent.run("delegate");
+
+      expect(result.toolCalls[0]!.error).toContain("nonexistent");
+    });
+
+    it("should throw when delegating without registry", async () => {
+      const delegateTool: Tool = {
+        name: "delegate_tool",
+        description: "Delegates without registry",
+        parameters: { type: "object", properties: {} },
+        execute: async (_input: unknown, ctx: AgentContext) => {
+          await ctx.delegate("some-agent", "hello");
+          return "done";
+        },
+      };
+
+      const provider = createMockProvider([
+        {
+          content: "",
+          toolCalls: [{ id: "tc-1", name: "delegate_tool", arguments: "{}" }],
+          usage: USAGE,
+          finishReason: "tool_calls",
+        },
+        { content: "Error handled", usage: USAGE, finishReason: "stop" },
+      ]);
+      const agent = new Agent({
+        name: "no-registry-agent",
+        systemPrompt: "Test",
+        provider,
+        model: { model: "test-model" },
+        tools: [delegateTool],
+      });
+
+      const result = await agent.run("delegate");
+
+      expect(result.toolCalls[0]!.error).toContain("no agent registry");
     });
   });
 });

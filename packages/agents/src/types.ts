@@ -1,4 +1,5 @@
 import type { HandlerCtx, RetryConfig } from "@synkro/core";
+import type { AgentRegistry } from "./agent-registry.js";
 import type { ModelProvider } from "./llm/provider.js";
 import type { Message, ModelOptions, TokenUsage } from "./llm/types.js";
 import type { AgentMemory } from "./memory/memory.js";
@@ -16,11 +17,13 @@ export type AgentConfig = {
   tokenBudget?: number | undefined;
   retry?: RetryConfig | undefined;
   onTokenUsage?: ((usage: TokenUsage) => void) | undefined;
+  registry?: AgentRegistry | undefined;
 };
 
 export type AgentRunOptions = {
   requestId?: string | undefined;
   payload?: unknown;
+  synkroCtx?: HandlerCtx | undefined;
 };
 
 export type AgentRunResult = {
@@ -41,6 +44,7 @@ export type AgentContext = HandlerCtx & {
   agentName: string;
   runId: string;
   tokenUsage: TokenUsage;
+  delegate: (agentName: string, input: string) => Promise<AgentRunResult>;
 };
 
 export type { AgentMemory } from "./memory/memory.js";

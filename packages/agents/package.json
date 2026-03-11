@@ -1,6 +1,6 @@
 {
   "name": "@synkro/agents",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI agent orchestration for @synkro/core — LLM-powered agents with tools, memory, and multi-agent patterns",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

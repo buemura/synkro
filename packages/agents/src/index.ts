@@ -1,6 +1,11 @@
 // Core
 export { Agent } from "./agent.js";
-export { createAgent, createTool } from "./factories.js";
+export { AgentRegistry } from "./agent-registry.js";
+export { createAgent, createTool, createAgentRegistry } from "./factories.js";
+
+// Orchestration
+export { createPipeline } from "./orchestration/pipeline.js";
+export type { AgentStep, PipelineConfig } from "./orchestration/pipeline.js";
 
 // LLM
 export type { ModelProvider } from "./llm/provider.js";
