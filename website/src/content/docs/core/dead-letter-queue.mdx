@@ -1,0 +1,93 @@
+---
+title: Dead Letter Queue
+description: Inspect and replay failed messages after all retries are exhausted.
+sidebar:
+  order: 13
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+When a handler fails after all retries are exhausted, the failed message can be stored in a dead letter queue (DLQ) for later inspection and replay.
+
+## Enabling the DLQ
+
+Set `deadLetterQueue: true` in the configuration:
+
+```ts
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+  deadLetterQueue: true,
+});
+```
+
+<Aside type="note">
+The DLQ is transport-level — Redis stores failed messages in a list keyed by event type (`synkro:dlq:{eventType}`). The in-memory transport also supports DLQ storage.
+</Aside>
+
+## How it works
+
+<Steps>
+
+1. A handler throws an error.
+2. Synkro retries according to the `RetryConfig`.
+3. After all retries are exhausted, the message is published as failed.
+4. If `deadLetterQueue` is enabled, a `DeadLetterItem` is pushed to the DLQ.
+
+</Steps>
+
+## Inspecting failed messages
+
+Retrieve DLQ items for a specific event type:
+
+```ts
+const items = await synkro.getDeadLetterItems("payment:charge");
+
+for (const item of items) {
+  console.log(`Failed at: ${item.failedAt}`);
+  console.log(`Attempts: ${item.attempts}`);
+  console.log(`Errors:`, item.errors);
+  console.log(`Payload:`, item.payload);
+}
+```
+
+You can limit the number of items returned:
+
+```ts
+const items = await synkro.getDeadLetterItems("payment:charge", { limit: 10 });
+```
+
+## Replaying failed messages
+
+Reprocess a failed message by passing it back through `publish`:
+
+```ts
+const items = await synkro.getDeadLetterItems("payment:charge");
+
+for (const item of items) {
+  await synkro.replayDeadLetterItem(item);
+}
+```
+
+`replayDeadLetterItem` re-publishes the event with the original `eventType`, `payload`, and `requestId`.
+
+## Clearing the DLQ
+
+Remove all items from a specific event's DLQ:
+
+```ts
+await synkro.clearDeadLetterQueue("payment:charge");
+```
+
+## DeadLetterItem type
+
+```ts
+type DeadLetterItem = {
+  eventType: string;
+  requestId: string;
+  payload: unknown;
+  errors: Array<{ message: string; name?: string }>;
+  failedAt: string;    // ISO 8601 timestamp
+  attempts: number;    // total attempts (initial + retries)
+};
+```

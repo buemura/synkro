@@ -1,0 +1,42 @@
+---
+title: NestJS Integration
+description: Decorator-based NestJS module for registering Synkro event handlers and workflows.
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`@synkro/nestjs` brings Synkro into the NestJS ecosystem with decorator-based handler registration, async module configuration, and full feature parity with `@synkro/core`.
+
+## Features
+
+- **Decorator-based registration** — use `@OnEvent` and `@OnWorkflowStep` to bind handlers directly on your service methods
+- **Async module config** — configure the transport and connection via `ConfigService` or any async provider
+- **Lazy provider binding** — decorated handlers are discovered at startup and wired into the Synkro instance automatically
+- **Full core parity** — `SynkroService` exposes `publish`, `on`, `introspect`, `getEventMetrics`, and the raw `getInstance` escape hatch
+
+## Installation
+
+```bash
+npm install @synkro/nestjs @synkro/core
+```
+
+### Peer dependencies
+
+| Package | Version |
+|---|---|
+| `@nestjs/common` | `^10.0.0 \|\| ^11.0.0` |
+| `@nestjs/core` | `^10.0.0 \|\| ^11.0.0` |
+| `@synkro/core` | `^0.15.0` |
+| `reflect-metadata` | `^0.1.13 \|\| ^0.2.0` |
+
+<Aside type="tip">
+  The module is registered globally — you only need to import `SynkroModule` once in your root module. `SynkroService` will be available for injection everywhere.
+</Aside>
+
+## Next steps
+
+- [Module Registration](/nestjs/module-registration/) — `forRoot` and `forRootAsync` configuration
+- [Decorators](/nestjs/decorators/) — `@OnEvent` and `@OnWorkflowStep` usage
+- [API Reference](/nestjs/api-reference/) — full method and type reference

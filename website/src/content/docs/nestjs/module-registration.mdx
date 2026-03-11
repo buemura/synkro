@@ -1,0 +1,94 @@
+---
+title: Module Registration
+description: Register SynkroModule with static or async configuration in your NestJS application.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+## Static configuration
+
+Use `SynkroModule.forRoot()` when your configuration values are available at import time.
+
+```typescript
+import { Module } from "@nestjs/common";
+import { SynkroModule } from "@synkro/nestjs";
+
+@Module({
+  imports: [
+    SynkroModule.forRoot({
+      transport: "redis",
+      connectionUrl: "redis://localhost:6379",
+      workflows: [
+        // workflow definitions (see Decorators page)
+      ],
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+## Async configuration
+
+Use `SynkroModule.forRootAsync()` when you need to resolve configuration from `ConfigService`, a database, or any other async provider.
+
+```typescript
+import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { SynkroModule } from "@synkro/nestjs";
+
+@Module({
+  imports: [
+    ConfigModule.forRoot(),
+    SynkroModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        transport: "redis",
+        connectionUrl: config.getOrThrow("REDIS_URL"),
+        debug: config.get("SYNKRO_DEBUG") === "true",
+      }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+## `SynkroModuleOptions`
+
+| Property | Type | Required | Description |
+|---|---|---|---|
+| `transport` | `"redis" \| "in-memory"` | Yes | Event transport backend. |
+| `connectionUrl` | `string` | No | Redis connection URL. Required when `transport` is `"redis"`. |
+| `debug` | `boolean` | No | Enable debug logging. |
+| `workflows` | `NestSynkroWorkflow[]` | No | Workflow definitions. Step handlers can be inline or bound via `@OnWorkflowStep`. |
+| `retention` | `RetentionConfig` | No | TTL overrides for internal state keys. |
+
+## Retention configuration
+
+All values are in **seconds**.
+
+```typescript
+SynkroModule.forRoot({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+  retention: {
+    lockTtl: 30,
+    dedupTtl: 60,
+    stateTtl: 86400,
+    metricsTtl: 604800,
+  },
+});
+```
+
+| Key | Description |
+|---|---|
+| `lockTtl` | Duration a processing lock is held before it expires. |
+| `dedupTtl` | Window during which duplicate event deliveries are suppressed. |
+| `stateTtl` | How long workflow state is kept after completion. |
+| `metricsTtl` | How long event metrics are retained. |
+
+<Aside>
+  The module is registered as a **global** module. You do not need to re-import it in feature modules — just inject `SynkroService` wherever you need it.
+</Aside>

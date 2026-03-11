@@ -1,0 +1,132 @@
+---
+title: API Reference
+description: Complete API reference for the @synkro/nestjs integration module.
+sidebar:
+  order: 4
+---
+
+## SynkroModule
+
+### `SynkroModule.forRoot(options)`
+
+Registers the module with static configuration. Returns a global `DynamicModule`.
+
+```typescript
+SynkroModule.forRoot({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+  workflows: [],
+  retention: { lockTtl: 30 },
+});
+```
+
+### `SynkroModule.forRootAsync(options)`
+
+Registers the module with async configuration resolved from injected providers.
+
+```typescript
+SynkroModule.forRootAsync({
+  imports: [ConfigModule],
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => ({
+    transport: "redis",
+    connectionUrl: config.getOrThrow("REDIS_URL"),
+  }),
+});
+```
+
+| Property | Type | Description |
+|---|---|---|
+| `imports` | `any[]` | Modules to import for provider resolution. |
+| `inject` | `any[]` | Tokens to inject into `useFactory`. |
+| `useFactory` | `(...args) => SynkroModuleOptions \| Promise<SynkroModuleOptions>` | Factory function that returns configuration. |
+
+---
+
+## SynkroService
+
+Injectable service that wraps the core `Synkro` instance. Available globally after module registration.
+
+### `publish(event, payload?, requestId?)`
+
+Publishes an event to all registered handlers and triggers matching workflows.
+
+```typescript
+const id = await synkroService.publish("order.created", { orderId: "123" });
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `event` | `string` | Event type. |
+| `payload` | `unknown` | Optional event payload. |
+| `requestId` | `string` | Optional deduplication ID. Auto-generated if omitted. |
+
+**Returns** `Promise<string>` — the request ID.
+
+### `on(eventType, handler, retry?)`
+
+Registers an event handler programmatically (alternative to `@OnEvent`).
+
+| Parameter | Type | Description |
+|---|---|---|
+| `eventType` | `string` | Event type to listen for. |
+| `handler` | `HandlerFunction` | Callback invoked with the event payload. |
+| `retry` | `RetryConfig` | Optional retry configuration. |
+
+### `introspect()`
+
+Returns metadata about all registered events and workflows.
+
+**Returns** `SynkroIntrospection`
+
+### `getEventMetrics(eventType)`
+
+Returns metrics (received, completed, failed) for a specific event type.
+
+**Returns** `Promise<EventMetrics>`
+
+### `getInstance()`
+
+Returns the underlying `Synkro` instance for advanced use cases.
+
+**Returns** `Synkro`
+
+### Injection example
+
+```typescript
+import { Controller, Post, Body } from "@nestjs/common";
+import { SynkroService } from "@synkro/nestjs";
+
+@Controller("orders")
+export class OrdersController {
+  constructor(private readonly synkro: SynkroService) {}
+
+  @Post()
+  async createOrder(@Body() body: { items: string[] }) {
+    const requestId = await this.synkro.publish("order.created", body);
+    return { requestId };
+  }
+}
+```
+
+---
+
+## Decorators
+
+### `@OnEvent(type, retry?)`
+
+Method decorator. Registers the decorated method as a handler for the given event type.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `type` | `string` | Event type. |
+| `retry` | `RetryConfig` | Optional retry configuration (`maxRetries`, `retryDelay`). |
+
+### `@OnWorkflowStep(workflow, step)`
+
+Method decorator. Binds the decorated method as the handler for a workflow step.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `workflow` | `string` | Workflow name. |
+| `step` | `string` | Step type within the workflow. |

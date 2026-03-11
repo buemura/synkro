@@ -1,0 +1,136 @@
+---
+title: Memory
+description: Persist agent conversations across runs with Redis-backed memory.
+sidebar:
+  order: 5
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+By default, each `agent.run()` call starts with a blank conversation. **Memory** lets agents recall previous interactions so they can handle follow-up questions and maintain context across runs.
+
+## ConversationMemory
+
+`ConversationMemory` stores messages in Redis using Synkro's `TransportManager`. No extra infrastructure — it reuses the same Redis connection your Synkro instance already has.
+
+```ts
+import { ConversationMemory } from "@synkro/agents";
+import { Synkro } from "@synkro/core";
+
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+});
+
+const memory = new ConversationMemory({
+  transport: synkro.transport,
+  maxMessages: 50,    // Keep last 50 messages (default: 100)
+  ttlSeconds: 3600,   // Expire after 1 hour (default: 86400 = 24h)
+});
+```
+
+### Configuration
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `transport` | `TransportManager` | *required* | Synkro transport instance (use `synkro.transport`). |
+| `maxMessages` | `number` | `100` | Maximum messages to retrieve per conversation. |
+| `ttlSeconds` | `number` | `86400` | TTL in seconds for conversation data. Set to `0` for no expiry. |
+
+### How it works
+
+Messages are stored in Redis lists keyed by `synkro:agent:memory:{agentName}:{runId}`. The `requestId` option on `agent.run()` controls which conversation is loaded:
+
+- Same `requestId` across runs = same conversation thread.
+- Different or omitted `requestId` = fresh conversation.
+
+## Example: multi-turn conversation
+
+<Steps>
+
+1. **Create an agent with memory**
+
+   ```ts
+   import { createAgent, OpenAIProvider, ConversationMemory } from "@synkro/agents";
+   import { Synkro } from "@synkro/core";
+
+   const synkro = await Synkro.start({
+     transport: "redis",
+     connectionUrl: "redis://localhost:6379",
+   });
+
+   const agent = createAgent({
+     name: "tutor",
+     systemPrompt: "You are a patient math tutor.",
+     provider: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY! }),
+     model: { model: "gpt-4o" },
+     memory: new ConversationMemory({ transport: synkro.transport }),
+   });
+   ```
+
+2. **First message**
+
+   ```ts
+   const sessionId = "student-42";
+
+   const r1 = await agent.run("What is a derivative?", {
+     requestId: sessionId,
+   });
+   console.log(r1.output);
+   // "A derivative measures the rate of change of a function..."
+   ```
+
+3. **Follow-up (agent remembers)**
+
+   ```ts
+   const r2 = await agent.run("Can you give me an example?", {
+     requestId: sessionId,
+   });
+   console.log(r2.output);
+   // "Sure! For f(x) = x², the derivative f'(x) = 2x..."
+   ```
+
+</Steps>
+
+<Aside type="tip">
+Use a stable identifier as the `requestId` — a user ID, session token, or chat thread ID. This becomes the memory key that links runs into a conversation.
+</Aside>
+
+## Custom memory
+
+Implement the `AgentMemory` interface to use a different storage backend:
+
+```ts
+import type { AgentMemory, Message } from "@synkro/agents";
+
+class PostgresMemory implements AgentMemory {
+  async addMessage(agentId: string, runId: string, message: Message): Promise<void> {
+    // INSERT INTO agent_messages (agent_id, run_id, role, content) VALUES (...)
+  }
+
+  async getMessages(agentId: string, runId: string): Promise<Message[]> {
+    // SELECT * FROM agent_messages WHERE agent_id = $1 AND run_id = $2 ORDER BY created_at
+    return [];
+  }
+
+  async clear(agentId: string, runId: string): Promise<void> {
+    // DELETE FROM agent_messages WHERE agent_id = $1 AND run_id = $2
+  }
+}
+```
+
+### AgentMemory interface
+
+```ts
+interface AgentMemory {
+  addMessage(agentId: string, runId: string, message: Message): Promise<void>;
+  getMessages(agentId: string, runId: string): Promise<Message[]>;
+  clear(agentId: string, runId: string): Promise<void>;
+}
+```
+
+| Method | Description |
+|---|---|
+| `addMessage` | Store a single message in the conversation identified by `agentId` + `runId`. |
+| `getMessages` | Retrieve all stored messages for a conversation. Called at the start of `agent.run()`. |
+| `clear` | Delete all messages for a conversation. |

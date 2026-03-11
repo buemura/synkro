@@ -1,0 +1,63 @@
+---
+title: Route Handlers
+description: Publish events and serve the Synkro dashboard from Next.js App Router route handlers.
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Publishing events
+
+Use the shared `synkro` client inside any App Router route handler.
+
+```typescript
+// app/api/orders/route.ts
+import { NextResponse } from "next/server";
+import { synkro } from "@/lib/synkro";
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const requestId = await synkro.publish("order.created", body);
+  return NextResponse.json({ requestId });
+}
+```
+
+## Mounting the dashboard
+
+Create a catch-all route that forwards requests to the dashboard handler.
+
+```typescript
+// app/synkro/[[...path]]/route.ts
+import { createDashboardHandler } from "@synkro/next";
+import { synkro } from "@/lib/synkro";
+
+const handler = createDashboardHandler(synkro, { basePath: "/synkro" });
+
+export const GET = handler;
+```
+
+The dashboard is now available at `/synkro`.
+
+<Aside type="tip">
+  The `createDashboardHandler` from `@synkro/next` returns a Web `Request => Promise<Response>` handler, which is the format Next.js App Router expects. This is different from the `@synkro/ui` handler which uses Node.js `IncomingMessage` / `ServerResponse`.
+</Aside>
+
+## Registering event handlers
+
+Register handlers by calling `synkro.on()` in your shared module or in a route handler that runs at startup.
+
+```typescript
+// lib/synkro.ts
+import { createSynkro } from "@synkro/next";
+
+export const synkro = createSynkro({
+  transport: "redis",
+  connectionUrl: process.env.REDIS_URL!,
+});
+
+// Register handlers — these attach once the instance initializes
+synkro.on("order.created", async (payload) => {
+  console.log("Order created:", payload);
+});
+```

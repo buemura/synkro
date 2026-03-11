@@ -1,0 +1,68 @@
+---
+title: API Reference
+description: Complete API reference for the @synkro/ui dashboard package.
+sidebar:
+  order: 3
+---
+
+## `createDashboardHandler(synkro, options?)`
+
+Creates an HTTP request handler that serves the dashboard UI and its backing API routes.
+
+**Signature**
+
+```typescript
+function createDashboardHandler(
+  synkro: Synkro,
+  options?: DashboardOptions,
+): (req: IncomingMessage, res: ServerResponse) => void;
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `synkro` | `Synkro` | A running Synkro instance (from `@synkro/core`). |
+| `options.basePath` | `string` | URL prefix the handler is mounted at. Defaults to `"/"`. |
+
+### Return value
+
+A standard Node.js request handler `(IncomingMessage, ServerResponse) => void` compatible with Express, Fastify (via `req.raw` / `reply.raw`), and the built-in `http` module.
+
+---
+
+## Served routes
+
+The handler responds to the following `GET` routes. All paths are relative to `basePath`.
+
+| Route | Content-Type | Description |
+|---|---|---|
+| `GET /` | `text/html` | Self-contained dashboard HTML page. |
+| `GET /api/introspection` | `application/json` | JSON metadata for all registered events and workflows. |
+| `GET /api/events/:type` | `application/json` | Per-event metrics (received, completed, failed counts). |
+
+Any other path returns `404 Not Found`. Non-`GET` methods return `405 Method Not Allowed`.
+
+---
+
+## `DashboardOptions`
+
+```typescript
+type DashboardOptions = {
+  basePath?: string;
+};
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `basePath` | `string` | `"/"` | The URL prefix where the handler is mounted. Used to strip the prefix before matching internal routes. |
+
+---
+
+## `getDashboardHtml()`
+
+Returns the raw HTML string for the dashboard. Useful if you need to serve the page through a custom mechanism instead of using `createDashboardHandler`.
+
+```typescript
+function getDashboardHtml(): string;
+```

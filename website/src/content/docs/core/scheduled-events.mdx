@@ -1,0 +1,96 @@
+---
+title: Scheduled Events
+description: Publish events on a delay or on a recurring schedule.
+sidebar:
+  order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Synkro supports two types of scheduled events: one-shot delayed publishing and recurring schedules.
+
+## Delayed publishing
+
+Use `publishDelayed` to publish an event after a specified delay:
+
+```ts
+const requestId = synkro.publishDelayed(
+  "reminder:send",
+  { userId: "u1", message: "Your trial expires tomorrow" },
+  86400000, // 24 hours in milliseconds
+);
+```
+
+The event is published once after the delay elapses. The returned `requestId` identifies the pending timer.
+
+## Recurring schedules
+
+Use `schedule` to publish an event at a regular interval:
+
+```ts
+const scheduleId = synkro.schedule(
+  "metrics:collect",
+  60000, // every 60 seconds
+  { source: "api-server" },
+);
+```
+
+The event is published repeatedly at the specified interval until cancelled.
+
+## Cancelling a schedule
+
+Use `unschedule` to stop a recurring schedule:
+
+```ts
+const cancelled = synkro.unschedule(scheduleId);
+// true if the schedule was found and cancelled
+// false if the scheduleId was not found
+```
+
+## Full example
+
+```ts
+import { Synkro } from "@synkro/core";
+
+const synkro = await Synkro.start({ transport: "in-memory" });
+
+// Register handlers
+synkro.on("health:check", async (ctx) => {
+  console.log("Health check:", new Date().toISOString());
+});
+
+synkro.on("report:generate", async (ctx) => {
+  console.log("Generating report for:", ctx.payload?.period);
+});
+
+// Schedule a health check every 30 seconds
+const healthCheckId = synkro.schedule("health:check", 30000);
+
+// Send a delayed report event in 5 minutes
+synkro.publishDelayed(
+  "report:generate",
+  { period: "daily" },
+  300000,
+);
+
+// Later, cancel the recurring health check
+synkro.unschedule(healthCheckId);
+```
+
+<Aside type="note">
+Scheduled timers are local to the process. They are cleared automatically when `synkro.stop()` is called. In multi-instance deployments, each instance manages its own schedules independently.
+</Aside>
+
+## ScheduleInfo type
+
+You can inspect active schedules via introspection:
+
+```ts
+type ScheduleInfo = {
+  scheduleId: string;
+  eventType: string;
+  intervalMs: number;
+  payload?: unknown;
+  createdAt: string;
+};
+```

@@ -1,0 +1,88 @@
+---
+title: Workflow Chaining
+description: Trigger follow-up workflows automatically when a workflow completes, succeeds, or fails.
+sidebar:
+  order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Workflow chaining lets you connect workflows together. When one workflow finishes, it can automatically trigger another based on the outcome.
+
+## Chain properties
+
+Each workflow definition supports three chaining hooks:
+
+| Property | Triggers when |
+|---|---|
+| `onSuccess` | The workflow completes successfully (all steps passed). |
+| `onFailure` | The workflow fails (a step failed with no `onFailure` branch). |
+| `onComplete` | The workflow finishes, regardless of outcome. Runs after `onSuccess` or `onFailure`. |
+
+## Example
+
+```ts
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+  workflows: [
+    {
+      name: "ProcessOrder",
+      steps: [
+        { type: "ValidateOrder", handler: validateOrder },
+        { type: "ChargePayment", handler: chargePayment },
+        { type: "FulfillOrder", handler: fulfillOrder },
+      ],
+      onSuccess: "StartShipment",
+      onFailure: "HandleError",
+      onComplete: "NotifyCustomer",
+    },
+    {
+      name: "StartShipment",
+      steps: [
+        { type: "CreateLabel", handler: createLabel },
+        { type: "SchedulePickup", handler: schedulePickup },
+      ],
+    },
+    {
+      name: "HandleError",
+      steps: [
+        { type: "LogError", handler: logError },
+        { type: "RefundPayment", handler: refundPayment },
+      ],
+    },
+    {
+      name: "NotifyCustomer",
+      steps: [
+        { type: "SendEmail", handler: sendEmail },
+      ],
+    },
+  ],
+});
+
+await synkro.publish("ProcessOrder", { orderId: "abc-123" });
+```
+
+### Success path
+
+`ProcessOrder` completes successfully:
+1. `StartShipment` is triggered (`onSuccess`).
+2. `NotifyCustomer` is triggered (`onComplete`).
+
+### Failure path
+
+`ProcessOrder` fails at any step:
+1. `HandleError` is triggered (`onFailure`).
+2. `NotifyCustomer` is triggered (`onComplete`).
+
+## Inherited context
+
+Chained workflows inherit the `requestId` and `payload` from the parent workflow. The payload includes any modifications made by `ctx.setPayload()` during the parent workflow's execution.
+
+<Aside type="note">
+The chained workflow name must match a registered workflow. If the target workflow is not found, an error is logged and the chain is skipped.
+</Aside>
+
+## Combining with conditional routing
+
+Workflow chaining and [conditional routing](/core/conditional-routing) work together. Conditional routing controls branching **within** a workflow; chaining controls what happens **after** a workflow finishes. You can use both on the same workflow.

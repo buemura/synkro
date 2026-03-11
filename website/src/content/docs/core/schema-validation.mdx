@@ -1,0 +1,121 @@
+---
+title: Schema Validation
+description: Validate event payloads at publish and dispatch time using Zod, Joi, or custom validators.
+sidebar:
+  order: 7
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Synkro supports payload validation through a simple `SchemaValidator` interface. Validators run at publish time (for global schemas) and at dispatch time (for per-event schemas), catching invalid data before it reaches your handlers.
+
+## SchemaValidator type
+
+```ts
+type SchemaValidator = (payload: unknown) => void;
+```
+
+A schema validator is a function that receives the payload and **throws** if the payload is invalid. If it returns without throwing, the payload is considered valid.
+
+## Global schemas
+
+Register schemas in the `schemas` config object. These are validated when `synkro.publish()` is called:
+
+```ts
+const synkro = await Synkro.start({
+  transport: "in-memory",
+  schemas: {
+    "order:placed": (payload) => {
+      if (!payload || typeof payload !== "object") {
+        throw new Error("Payload must be an object");
+      }
+      if (!("orderId" in payload)) {
+        throw new Error("orderId is required");
+      }
+    },
+  },
+});
+```
+
+## Per-event schemas
+
+Attach a `schema` to an individual event definition. Per-event schemas are validated at both publish and dispatch time:
+
+```ts
+const synkro = await Synkro.start({
+  transport: "in-memory",
+  events: [
+    {
+      type: "user:registered",
+      handler: async (ctx) => { /* ... */ },
+      schema: (payload) => {
+        if (!payload?.email) throw new Error("email is required");
+      },
+    },
+  ],
+});
+```
+
+## Using with validation libraries
+
+<Tabs>
+<TabItem label="Zod">
+
+```ts
+import { z } from "zod";
+
+const OrderSchema = z.object({
+  orderId: z.string(),
+  items: z.array(z.object({
+    sku: z.string(),
+    qty: z.number().positive(),
+  })),
+  total: z.number().positive(),
+});
+
+const synkro = await Synkro.start({
+  transport: "in-memory",
+  schemas: {
+    "order:placed": (payload) => OrderSchema.parse(payload),
+  },
+});
+```
+
+</TabItem>
+<TabItem label="Manual">
+
+```ts
+const synkro = await Synkro.start({
+  transport: "in-memory",
+  schemas: {
+    "user:registered": (payload) => {
+      if (typeof payload !== "object" || payload === null) {
+        throw new TypeError("Payload must be an object");
+      }
+      const p = payload as Record<string, unknown>;
+      if (typeof p.email !== "string") {
+        throw new TypeError("email must be a string");
+      }
+      if (typeof p.name !== "string") {
+        throw new TypeError("name must be a string");
+      }
+    },
+  },
+});
+```
+
+</TabItem>
+</Tabs>
+
+<Aside type="tip">
+Any library that throws on invalid input works as a `SchemaValidator` — Zod, Joi, Valibot, ArkType, or plain `if/throw` checks.
+</Aside>
+
+## Validation timing
+
+| Schema location | Validated at publish | Validated at dispatch |
+|---|---|---|
+| `schemas` (global) | Yes | No |
+| `events[].schema` (per-event) | No | Yes |
+
+Global schemas catch invalid payloads early, before the message enters the transport. Per-event schemas provide an additional check at the handler level.

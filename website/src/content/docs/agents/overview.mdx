@@ -1,0 +1,92 @@
+---
+title: Overview
+description: AI agent orchestration for Synkro — LLM-powered agents with tools, memory, and multi-agent patterns.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+**@synkro/agents** adds AI agent orchestration to Synkro. Build LLM-powered agents that reason, call tools, remember conversations, and plug directly into Synkro's event engine — with zero additional dependencies.
+
+## When to use it
+
+- You need an LLM agent that can call tools and reason in a loop (ReAct pattern).
+- You want to run agents as Synkro event handlers or workflow steps.
+- You need conversation memory backed by Redis, reusing your existing Synkro transport.
+- You want provider-agnostic code that works with OpenAI, Anthropic, or Google Gemini.
+
+## Features
+
+| Feature | Description |
+|---|---|
+| **ReAct loop** | Agents reason and act in iterations — call tools, observe results, decide next steps. |
+| **Tool execution** | Define typed tools with JSON Schema parameters; the agent calls them automatically. |
+| **Provider agnostic** | Built-in support for OpenAI, Anthropic, and Gemini. Bring your own via the `ModelProvider` interface. |
+| **Conversation memory** | Redis-backed memory reuses Synkro's `TransportManager` — no extra infrastructure. |
+| **Synkro integration** | `agent.asHandler()` turns any agent into an event handler or workflow step. |
+| **Token tracking** | Cumulative token usage per run with optional budget limits and callbacks. |
+| **Safety guardrails** | `maxIterations` and `tokenBudget` prevent runaway agents. |
+| **Zero dependencies** | Uses `fetch` for HTTP — no SDK packages to install. |
+
+## Installation
+
+```bash
+npm install @synkro/agents @synkro/core
+```
+
+## Quick start
+
+<Steps>
+
+1. **Install the packages**
+
+   ```bash
+   npm install @synkro/agents @synkro/core
+   ```
+
+2. **Create an agent and run it**
+
+   ```ts
+   import { createAgent, OpenAIProvider } from "@synkro/agents";
+
+   const agent = createAgent({
+     name: "assistant",
+     systemPrompt: "You are a helpful assistant.",
+     provider: new OpenAIProvider({
+       apiKey: process.env.OPENAI_API_KEY!,
+     }),
+     model: { model: "gpt-4o" },
+   });
+
+   const result = await agent.run("What is the capital of France?");
+
+   console.log(result.output);
+   // "The capital of France is Paris."
+
+   console.log(result.tokenUsage);
+   // { promptTokens: 25, completionTokens: 12, totalTokens: 37 }
+   ```
+
+3. **Check the result status**
+
+   ```ts
+   if (result.status === "completed") {
+     console.log("Agent finished successfully");
+   }
+   ```
+
+</Steps>
+
+<Aside type="tip">
+Agents work standalone or plugged into Synkro. See [Synkro Integration](/agents/synkro-integration) to run agents as event handlers with distributed locking, retries, and dead letter queues for free.
+</Aside>
+
+## Next steps
+
+- [Creating Agents](/agents/creating-agents) — configure agents with tools, memory, and guardrails.
+- [Tools](/agents/tools) — define tools the agent can call during its reasoning loop.
+- [Providers](/agents/providers) — use OpenAI, Anthropic, Gemini, or bring your own.
+- [Memory](/agents/memory) — persist conversations across runs.
+- [Synkro Integration](/agents/synkro-integration) — run agents as event handlers and workflow steps.
+- [API Reference](/agents/api-reference) — complete type and function reference.

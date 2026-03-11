@@ -1,0 +1,132 @@
+---
+title: API Reference
+description: Complete API reference for the @synkro/next integration package.
+sidebar:
+  order: 4
+---
+
+## `createSynkro(options)`
+
+Creates a lazy singleton `SynkroClient`. The underlying `Synkro` instance is initialized on the first method call and cached on `globalThis` to survive HMR in development.
+
+```typescript
+import { createSynkro } from "@synkro/next";
+
+const synkro = createSynkro({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+});
+```
+
+**Parameters**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `options` | `SynkroNextOptions` | Same options as `Synkro.start()` from `@synkro/core` (`transport`, `connectionUrl`, `workflows`, `retention`, `debug`). |
+
+**Returns** `SynkroClient`
+
+---
+
+## SynkroClient
+
+All methods are async because the first call may trigger instance initialization.
+
+### `publish(event, payload?, requestId?)`
+
+Publishes an event.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `event` | `string` | Event type. |
+| `payload` | `unknown` | Optional event payload. |
+| `requestId` | `string` | Optional deduplication ID. Auto-generated if omitted. |
+
+**Returns** `Promise<string>` — the request ID.
+
+### `on(eventType, handler, retry?)`
+
+Registers an event handler.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `eventType` | `string` | Event type to listen for. |
+| `handler` | `HandlerFunction` | Callback invoked with the event payload. |
+| `retry` | `RetryConfig` | Optional retry configuration. |
+
+### `off(eventType, handler?)`
+
+Removes an event handler. If `handler` is omitted, removes all handlers for the event type.
+
+### `getWorkflowState(requestId, workflowName)`
+
+Returns the current state of a workflow execution.
+
+**Returns** `Promise<WorkflowState | null>`
+
+### `cancelWorkflow(requestId, workflowName)`
+
+Cancels a running workflow.
+
+**Returns** `Promise<boolean>` — `true` if the workflow was cancelled.
+
+### `introspect()`
+
+Returns metadata about all registered events and workflows.
+
+**Returns** `Promise<SynkroIntrospection>`
+
+### `getEventMetrics(eventType)`
+
+Returns metrics (received, completed, failed) for a specific event type.
+
+**Returns** `Promise<EventMetrics>`
+
+### `getInstance()`
+
+Returns the underlying `Synkro` instance.
+
+**Returns** `Promise<Synkro>`
+
+### `stop()`
+
+Stops the Synkro instance and clears the global cache. Call this during graceful shutdown.
+
+**Returns** `Promise<void>`
+
+---
+
+## `createDashboardHandler(synkro, options?)`
+
+Creates a Next.js-compatible route handler that serves the `@synkro/ui` dashboard.
+
+```typescript
+import { createDashboardHandler } from "@synkro/next";
+
+const handler = createDashboardHandler(synkro, { basePath: "/synkro" });
+export const GET = handler;
+```
+
+**Signature**
+
+```typescript
+function createDashboardHandler(
+  synkro: SynkroClient,
+  options?: DashboardHandlerOptions,
+): (request: Request) => Promise<Response>;
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `synkro` | `SynkroClient` | The client returned by `createSynkro`. |
+| `options.basePath` | `string` | URL prefix the handler is mounted at. Defaults to `"/"`. |
+
+### DashboardHandlerOptions
+
+```typescript
+type DashboardHandlerOptions = {
+  basePath?: string;
+};
+```

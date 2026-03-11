@@ -1,0 +1,137 @@
+---
+title: Retries
+description: Configure retry policies with fixed or exponential backoff, jitter, and retryable filters.
+sidebar:
+  order: 6
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+When a handler throws an error, Synkro can automatically retry it according to a `RetryConfig`.
+
+## RetryConfig
+
+```ts
+type RetryConfig = {
+  maxRetries: number;
+  delayMs?: number;       // Default: 1000
+  backoff?: "fixed" | "exponential";
+  jitter?: boolean;
+  retryable?: (error: unknown) => boolean;
+};
+```
+
+| Field | Description |
+|---|---|
+| `maxRetries` | Maximum number of retry attempts (not counting the initial attempt). |
+| `delayMs` | Base delay between retries in milliseconds. Defaults to `1000`. |
+| `backoff` | `"fixed"` uses the same delay every time. `"exponential"` doubles the delay on each attempt (`delayMs * 2^attempt`). |
+| `jitter` | When `true`, randomizes the delay by +/-50% to avoid thundering herd. |
+| `retryable` | A function that receives the error and returns `false` to skip retrying (e.g., for validation errors that will never succeed). |
+
+## Backoff strategies
+
+<Tabs>
+<TabItem label="Fixed">
+
+Every retry waits the same amount of time:
+
+```
+Attempt 1 → wait 1000ms
+Attempt 2 → wait 1000ms
+Attempt 3 → wait 1000ms
+```
+
+```ts
+{ maxRetries: 3, delayMs: 1000, backoff: "fixed" }
+```
+
+</TabItem>
+<TabItem label="Exponential">
+
+Each retry doubles the wait time:
+
+```
+Attempt 1 → wait 1000ms
+Attempt 2 → wait 2000ms
+Attempt 3 → wait 4000ms
+```
+
+```ts
+{ maxRetries: 3, delayMs: 1000, backoff: "exponential" }
+```
+
+</TabItem>
+</Tabs>
+
+When `jitter: true`, the computed delay is multiplied by a random factor between 0.5 and 1.0, preventing multiple failing handlers from retrying in lockstep.
+
+## Per-event retries
+
+```ts
+synkro.on(
+  "payment:charge",
+  async (ctx) => {
+    await chargeCard(ctx.payload);
+  },
+  { maxRetries: 5, delayMs: 500, backoff: "exponential", jitter: true },
+);
+```
+
+Or in the declarative config:
+
+```ts
+const synkro = await Synkro.start({
+  transport: "in-memory",
+  events: [
+    {
+      type: "payment:charge",
+      handler: async (ctx) => {
+        await chargeCard(ctx.payload);
+      },
+      retry: { maxRetries: 5, delayMs: 500, backoff: "exponential" },
+    },
+  ],
+});
+```
+
+## Per-step retries
+
+Workflow steps accept the same `retry` config:
+
+```ts
+{
+  name: "ProcessOrder",
+  steps: [
+    {
+      type: "ChargePayment",
+      handler: chargePayment,
+      retry: { maxRetries: 3, backoff: "exponential", delayMs: 1000 },
+    },
+    {
+      type: "FulfillOrder",
+      handler: fulfillOrder,
+      retry: { maxRetries: 2, backoff: "fixed", delayMs: 2000 },
+    },
+  ],
+}
+```
+
+## Skipping non-retryable errors
+
+Use the `retryable` function to bail out early for errors that will never succeed:
+
+```ts
+{
+  maxRetries: 5,
+  retryable: (error) => {
+    if (error instanceof ValidationError) return false;
+    if (error instanceof AuthenticationError) return false;
+    return true; // retry everything else
+  },
+}
+```
+
+<Aside type="note">
+After all retries are exhausted, the handler is considered failed. If the [dead letter queue](/core/dead-letter-queue) is enabled, the failed message is stored for later inspection.
+</Aside>

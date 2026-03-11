@@ -1,0 +1,411 @@
+---
+title: API Reference
+description: Complete API reference for @synkro/agents — all functions, classes, and types.
+sidebar:
+  order: 7
+---
+
+import { Badge } from '@astrojs/starlight/components';
+
+## Functions
+
+### createAgent(config) <Badge text="factory" />
+
+Creates an `Agent` instance.
+
+```ts
+function createAgent(config: AgentConfig): Agent;
+```
+
+See [Creating Agents](/agents/creating-agents) for usage details.
+
+---
+
+### createTool(definition) <Badge text="factory" />
+
+Creates a `Tool` instance. This is a passthrough helper for type inference.
+
+```ts
+function createTool<TInput = unknown, TOutput = unknown>(
+  tool: Tool<TInput, TOutput>
+): Tool<TInput, TOutput>;
+```
+
+See [Tools](/agents/tools) for usage details.
+
+---
+
+### createAgentRegistry() <Badge text="factory" />
+
+Creates an `AgentRegistry` for multi-agent delegation.
+
+```ts
+function createAgentRegistry(): AgentRegistry;
+```
+
+---
+
+### createPipeline(config) <Badge text="factory" />
+
+Creates a `SynkroWorkflow` from a list of agent steps.
+
+```ts
+function createPipeline(config: PipelineConfig): SynkroWorkflow;
+```
+
+See [Synkro Integration](/agents/synkro-integration) for usage details.
+
+## Classes
+
+### Agent
+
+The core agent class. Created via `createAgent()`.
+
+| Method | Signature | Description |
+|---|---|---|
+| `run` | `(input: string, options?: AgentRunOptions) => Promise<AgentRunResult>` | Execute the ReAct loop and return the result. |
+| `asHandler` | `() => HandlerFunction` | Convert the agent to a Synkro-compatible event handler. |
+
+| Property | Type | Description |
+|---|---|---|
+| `name` | `string` | Agent name (readonly). |
+| `description` | `string \| undefined` | Agent description (readonly). |
+
+---
+
+### OpenAIProvider
+
+```ts
+class OpenAIProvider implements ModelProvider {
+  constructor(options: OpenAIProviderOptions);
+  chat(messages: Message[], options: ModelOptions): Promise<ModelResponse>;
+}
+```
+
+| Field | Type | Default |
+|---|---|---|
+| `apiKey` | `string` | *required* |
+| `baseUrl` | `string` | `"https://api.openai.com/v1"` |
+
+---
+
+### AnthropicProvider
+
+```ts
+class AnthropicProvider implements ModelProvider {
+  constructor(options: AnthropicProviderOptions);
+  chat(messages: Message[], options: ModelOptions): Promise<ModelResponse>;
+}
+```
+
+| Field | Type | Default |
+|---|---|---|
+| `apiKey` | `string` | *required* |
+| `baseUrl` | `string` | `"https://api.anthropic.com/v1"` |
+
+---
+
+### GeminiProvider
+
+```ts
+class GeminiProvider implements ModelProvider {
+  constructor(options: GeminiProviderOptions);
+  chat(messages: Message[], options: ModelOptions): Promise<ModelResponse>;
+}
+```
+
+| Field | Type | Default |
+|---|---|---|
+| `apiKey` | `string` | *required* |
+| `baseUrl` | `string` | `"https://generativelanguage.googleapis.com/v1beta"` |
+
+---
+
+### ConversationMemory
+
+Redis-backed conversation memory using Synkro's transport.
+
+```ts
+class ConversationMemory implements AgentMemory {
+  constructor(options: ConversationMemoryOptions);
+  addMessage(agentId: string, runId: string, message: Message): Promise<void>;
+  getMessages(agentId: string, runId: string): Promise<Message[]>;
+  clear(agentId: string, runId: string): Promise<void>;
+}
+```
+
+| Field | Type | Default |
+|---|---|---|
+| `transport` | `TransportManager` | *required* |
+| `maxMessages` | `number` | `100` |
+| `ttlSeconds` | `number` | `86400` |
+
+---
+
+### AgentRegistry
+
+Registry for multi-agent delegation.
+
+```ts
+class AgentRegistry {
+  register(agent: Agent): void;
+  get(name: string): Agent | undefined;
+  has(name: string): boolean;
+  list(): Agent[];
+}
+```
+
+---
+
+### ToolRegistry
+
+Internal registry for agent tools.
+
+```ts
+class ToolRegistry {
+  register(tool: Tool): void;
+  get(name: string): Tool | undefined;
+  getDefinitions(): ToolDefinition[];
+}
+```
+
+---
+
+### ToolExecutor
+
+Internal executor that runs tool calls returned by the LLM.
+
+```ts
+class ToolExecutor {
+  constructor(registry: ToolRegistry);
+  executeAll(toolCalls: ToolCall[], ctx: AgentContext): Promise<ToolResult[]>;
+}
+```
+
+## Types
+
+### AgentConfig
+
+```ts
+type AgentConfig = {
+  name: string;
+  description?: string;
+  systemPrompt: string;
+  provider: ModelProvider;
+  model: ModelOptions;
+  tools?: Tool[];
+  memory?: AgentMemory;
+  maxIterations?: number;       // default: 10
+  tokenBudget?: number;
+  retry?: RetryConfig;
+  onTokenUsage?: (usage: TokenUsage) => void;
+  registry?: AgentRegistry;
+};
+```
+
+---
+
+### AgentRunOptions
+
+```ts
+type AgentRunOptions = {
+  requestId?: string;
+  payload?: unknown;
+  synkroCtx?: HandlerCtx;
+};
+```
+
+---
+
+### AgentRunResult
+
+```ts
+type AgentRunResult = {
+  agentName: string;
+  runId: string;
+  output: string;
+  messages: Message[];
+  toolCalls: ToolResult[];
+  tokenUsage: TokenUsage;
+  status: "completed" | "failed" | "max_iterations" | "token_budget_exceeded";
+};
+```
+
+---
+
+### AgentContext
+
+```ts
+type AgentContext = HandlerCtx & {
+  agentName: string;
+  runId: string;
+  tokenUsage: TokenUsage;
+  delegate: (agentName: string, input: string) => Promise<AgentRunResult>;
+};
+```
+
+---
+
+### Tool
+
+```ts
+type Tool<TInput = unknown, TOutput = unknown> = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (input: TInput, ctx: AgentContext) => Promise<TOutput>;
+};
+```
+
+---
+
+### ToolResult
+
+```ts
+type ToolResult = {
+  toolCallId: string;
+  name: string;
+  result: unknown;
+  error?: string;
+  durationMs: number;
+};
+```
+
+---
+
+### ToolCall
+
+```ts
+type ToolCall = {
+  id: string;
+  name: string;
+  arguments: string;
+};
+```
+
+---
+
+### ToolDefinition
+
+```ts
+type ToolDefinition = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+};
+```
+
+---
+
+### Message
+
+```ts
+type Message = {
+  role: MessageRole;
+  content: string;
+  toolCallId?: string;
+  toolCalls?: ToolCall[];
+};
+
+type MessageRole = "system" | "user" | "assistant" | "tool";
+```
+
+---
+
+### ModelProvider
+
+```ts
+interface ModelProvider {
+  chat(messages: Message[], options: ModelOptions): Promise<ModelResponse>;
+  chatStream?(messages: Message[], options: ModelOptions): AsyncIterable<ModelStreamChunk>;
+}
+```
+
+---
+
+### ModelOptions
+
+```ts
+type ModelOptions = {
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+  tools?: ToolDefinition[];
+};
+```
+
+---
+
+### ModelResponse
+
+```ts
+type ModelResponse = {
+  content: string;
+  toolCalls?: ToolCall[];
+  usage: TokenUsage;
+  finishReason: "stop" | "tool_calls" | "length";
+};
+```
+
+---
+
+### ModelStreamChunk
+
+```ts
+type ModelStreamChunk = {
+  content?: string;
+  toolCalls?: ToolCall[];
+  usage?: TokenUsage;
+  finishReason?: "stop" | "tool_calls" | "length";
+};
+```
+
+---
+
+### TokenUsage
+
+```ts
+type TokenUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+```
+
+---
+
+### AgentMemory
+
+```ts
+interface AgentMemory {
+  addMessage(agentId: string, runId: string, message: Message): Promise<void>;
+  getMessages(agentId: string, runId: string): Promise<Message[]>;
+  clear(agentId: string, runId: string): Promise<void>;
+}
+```
+
+---
+
+### PipelineConfig
+
+```ts
+type PipelineConfig = {
+  name: string;
+  steps: AgentStep[];
+  registry?: AgentRegistry;
+  onSuccess?: string;
+  onFailure?: string;
+  onComplete?: string;
+};
+```
+
+---
+
+### AgentStep
+
+```ts
+type AgentStep = {
+  agent: Agent | string;
+  inputMapper?: (payload: unknown) => string;
+};
+```

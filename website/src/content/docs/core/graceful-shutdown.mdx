@@ -1,0 +1,64 @@
+---
+title: Graceful Shutdown
+description: Drain in-flight handlers and disconnect cleanly with synkro.stop().
+sidebar:
+  order: 12
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+When your application shuts down, you want to finish processing in-flight events before disconnecting from the transport. Synkro provides a `stop()` method that handles this.
+
+## How it works
+
+<Steps>
+
+1. **Clear scheduled timers** — all delayed and recurring schedules are cancelled immediately.
+2. **Wait for in-flight handlers** — Synkro polls for active handler and workflow executions until they complete or the drain timeout is reached.
+3. **Disconnect** — the transport connection (Redis) is closed.
+
+</Steps>
+
+```ts
+await synkro.stop();
+```
+
+## Drain timeout
+
+The `drainTimeout` option controls how long `stop()` waits for in-flight handlers before forcing a disconnect. The default is **5000ms** (5 seconds).
+
+```ts
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+  drainTimeout: 10000, // wait up to 10 seconds
+});
+```
+
+If handlers are still running when the timeout is reached, Synkro logs a warning and disconnects anyway.
+
+## Process signal handlers
+
+Use `stop()` in response to `SIGTERM` and `SIGINT` to shut down gracefully in production:
+
+```ts
+import { Synkro } from "@synkro/core";
+
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: process.env.REDIS_URL,
+});
+
+async function shutdown() {
+  console.log("Shutting down...");
+  await synkro.stop();
+  process.exit(0);
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+```
+
+<Aside type="tip">
+In containerized environments (Docker, Kubernetes), `SIGTERM` is the standard signal sent before a pod is killed. Setting `drainTimeout` to a value slightly less than your container's grace period ensures a clean shutdown.
+</Aside>

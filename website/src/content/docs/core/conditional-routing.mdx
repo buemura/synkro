@@ -1,0 +1,118 @@
+---
+title: Conditional Routing
+description: Branch workflow execution based on step success or failure using onSuccess and onFailure.
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Workflow steps can define `onSuccess` and `onFailure` properties to route execution to different steps based on the outcome.
+
+## How it works
+
+- **`onSuccess`** — when the step handler succeeds, jump to the named step instead of the next sequential step.
+- **`onFailure`** — when the step handler fails (after all retries are exhausted), jump to the named step instead of failing the workflow.
+
+Steps referenced by `onSuccess` or `onFailure` are called **branch targets**. They are skipped during normal sequential advancement.
+
+## Basic example
+
+```ts
+const synkro = await Synkro.start({
+  transport: "in-memory",
+  workflows: [
+    {
+      name: "RunOCR",
+      steps: [
+        {
+          type: "ExtractText",
+          handler: async (ctx) => {
+            const text = await ocr(ctx.payload.imageUrl);
+            if (!text) throw new Error("OCR failed");
+            ctx.setPayload({ text });
+          },
+          onSuccess: "SaveResult",
+          onFailure: "HandleOCRError",
+        },
+        {
+          type: "SaveResult",
+          handler: async (ctx) => {
+            await db.save({ text: ctx.payload.text });
+          },
+        },
+        {
+          type: "HandleOCRError",
+          handler: async (ctx) => {
+            await alertOps("OCR extraction failed", ctx.payload);
+          },
+        },
+      ],
+    },
+  ],
+});
+```
+
+In this example:
+- If `ExtractText` succeeds, execution jumps to `SaveResult`.
+- If `ExtractText` fails, execution jumps to `HandleOCRError`.
+- `SaveResult` and `HandleOCRError` are branch targets — they are never reached by sequential advancement.
+
+## Branches with a common follow-up step
+
+Branch targets can lead into a shared step that runs regardless of which branch was taken:
+
+```ts
+{
+  name: "ProcessPayment",
+  steps: [
+    {
+      type: "ChargeCard",
+      handler: async (ctx) => {
+        const result = await charge(ctx.payload);
+        ctx.setPayload({ transactionId: result.id });
+      },
+      onSuccess: "RecordSuccess",
+      onFailure: "RecordFailure",
+    },
+    {
+      type: "RecordSuccess",
+      handler: async (ctx) => {
+        await db.record({ status: "paid", txn: ctx.payload.transactionId });
+      },
+    },
+    {
+      type: "RecordFailure",
+      handler: async (ctx) => {
+        await db.record({ status: "failed" });
+      },
+    },
+    {
+      type: "SendNotification",
+      handler: async (ctx) => {
+        await notify(ctx.payload);
+      },
+    },
+  ],
+}
+```
+
+Execution flow:
+
+1. `ChargeCard` runs.
+2. On success → `RecordSuccess`. On failure → `RecordFailure`.
+3. After the branch target completes, the workflow advances to `SendNotification` (the next non-branch-target step).
+
+<Aside type="tip">
+Branch targets (`RecordSuccess`, `RecordFailure`) are automatically detected. After a branch target completes, the engine skips over other branch targets and advances to the next regular step in the array.
+</Aside>
+
+## Advancement rules
+
+The routing logic follows these rules in order:
+
+1. If the step has `onSuccess` (on success) or `onFailure` (on failure), jump to the named target.
+2. If no routing property applies, advance to the next step in the array that is **not** a branch target.
+3. If no further non-branch-target steps exist, the workflow is complete.
+
+This means branch targets are effectively "out-of-band" — they participate in routing but are skipped during normal sequential flow.

@@ -1,0 +1,104 @@
+---
+title: Timeouts
+description: Enforce time limits on workflow steps and entire workflows.
+sidebar:
+  order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Timeouts prevent workflows from hanging indefinitely when a step takes too long. You can set timeouts at the workflow level, the step level, or both.
+
+## Workflow-level timeout
+
+Apply a default timeout to all steps in a workflow:
+
+```ts
+{
+  name: "ProcessOrder",
+  timeoutMs: 30000, // 30 seconds per step
+  steps: [
+    { type: "ValidateOrder", handler: validateOrder },
+    { type: "ChargePayment", handler: chargePayment },
+    { type: "FulfillOrder", handler: fulfillOrder },
+  ],
+}
+```
+
+Every step inherits the 30-second timeout unless it specifies its own.
+
+## Step-level timeout
+
+Override the workflow-level timeout for individual steps:
+
+```ts
+{
+  name: "ProcessOrder",
+  timeoutMs: 30000,
+  steps: [
+    { type: "ValidateOrder", handler: validateOrder },
+    {
+      type: "ChargePayment",
+      handler: chargePayment,
+      timeoutMs: 60000, // override: 60 seconds for payment
+    },
+    { type: "FulfillOrder", handler: fulfillOrder, timeoutMs: 10000 },
+  ],
+}
+```
+
+Step-level `timeoutMs` takes precedence over the workflow-level value.
+
+## What happens on timeout
+
+When a step exceeds its timeout:
+
+1. The step is treated as **failed** with a `TimeoutError`.
+2. If the step has an `onFailure` branch, execution routes to that step.
+3. If no `onFailure` branch is configured, the workflow fails and triggers any `onFailure` or `onComplete` chained workflows.
+
+```ts
+{
+  name: "ProcessDocument",
+  steps: [
+    {
+      type: "RunOCR",
+      handler: runOCR,
+      timeoutMs: 15000,
+      onFailure: "HandleTimeout",
+    },
+    {
+      type: "HandleTimeout",
+      handler: async (ctx) => {
+        await alertOps("OCR timed out", ctx.payload);
+      },
+    },
+  ],
+}
+```
+
+<Aside type="note">
+Timeout timers are cleared when a step completes (successfully or by failure) before the deadline. They are also cleared on workflow cancellation and during graceful shutdown.
+</Aside>
+
+## Type definitions
+
+```ts
+type SynkroWorkflow = {
+  name: string;
+  steps: SynkroWorkflowStep[];
+  timeoutMs?: number;      // default timeout for all steps
+  onComplete?: string;
+  onSuccess?: string;
+  onFailure?: string;
+};
+
+type SynkroWorkflowStep = {
+  type: string;
+  handler?: HandlerFunction;
+  retry?: RetryConfig;
+  onSuccess?: string;
+  onFailure?: string;
+  timeoutMs?: number;      // overrides workflow-level timeout
+};
+```

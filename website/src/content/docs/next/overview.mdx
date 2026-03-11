@@ -1,0 +1,41 @@
+---
+title: Next.js Integration
+description: Lazy singleton Synkro client for Next.js with App Router route handlers and dashboard support.
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`@synkro/next` provides a thin integration layer that makes Synkro work seamlessly inside Next.js applications — including development mode with HMR.
+
+## Features
+
+- **Lazy singleton** — the Synkro instance is created on first use and stored on `globalThis`, surviving Hot Module Replacement in development
+- **App Router route handlers** — publish events and serve the dashboard from Next.js `route.ts` files
+- **Dashboard integration** — mounts the `@synkro/ui` dashboard using the Web `Request` / `Response` API
+- **Zero runtime overhead** — no middleware, no custom server; everything runs inside standard route handlers
+
+## Installation
+
+```bash
+npm install @synkro/next @synkro/core @synkro/ui
+```
+
+<Aside>
+  `@synkro/ui` is a peer dependency because `@synkro/next` uses it to serve the dashboard HTML through its built-in handler.
+</Aside>
+
+### Peer dependencies
+
+| Package | Version |
+|---|---|
+| `@synkro/core` | `^0.16.0` |
+| `@synkro/ui` | `^0.2.1` |
+| `next` | `^14.0.0 \|\| ^15.0.0 \|\| ^16.0.0` |
+
+## Next steps
+
+- [Setup](/next/setup/) — create the Synkro client and configure Next.js
+- [Route Handlers](/next/route-handlers/) — publish events and mount the dashboard
+- [API Reference](/next/api-reference/) — full method and type reference

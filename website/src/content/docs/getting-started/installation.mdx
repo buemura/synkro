@@ -1,0 +1,133 @@
+---
+title: Installation
+description: Install Synkro and its integration packages for your Node.js project.
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem, Aside, Steps } from '@astrojs/starlight/components';
+
+## Prerequisites
+
+- **Node.js** version 18 or later
+- **TypeScript** is fully supported out of the box (types are bundled with every package)
+
+## Install the core package
+
+<Tabs>
+  <TabItem label="npm">
+    ```bash
+    npm install @synkro/core
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @synkro/core
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @synkro/core
+    ```
+  </TabItem>
+</Tabs>
+
+## Choose a transport
+
+Synkro ships with two built-in transports. Your choice determines how events are delivered and where workflow state is stored.
+
+| | In-Memory | Redis |
+|---|---|---|
+| **Use case** | Development and testing | Production |
+| **External deps** | None | Running Redis instance |
+| **Multi-instance** | No | Yes |
+
+### In-memory (default for dev)
+
+No additional dependencies required. Just set `transport: "in-memory"` in your configuration.
+
+### Redis (recommended for production)
+
+You need a running Redis instance and its connection URL:
+
+```ts
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+  // ...
+});
+```
+
+<Aside type="tip">
+  Redis is included as a dependency of `@synkro/core`, so you do not need to install `ioredis` separately.
+</Aside>
+
+## Integration packages
+
+Install only the packages you need. Each integration uses **peer dependencies** so your application controls the version of `@synkro/core`.
+
+<Tabs>
+  <TabItem label="npm">
+    ```bash
+    # Dashboard UI
+    npm install @synkro/ui
+
+    # NestJS integration
+    npm install @synkro/nestjs
+
+    # Next.js integration
+    npm install @synkro/next
+
+    # AI agent orchestration
+    npm install @synkro/agents
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    # Dashboard UI
+    pnpm add @synkro/ui
+
+    # NestJS integration
+    pnpm add @synkro/nestjs
+
+    # Next.js integration
+    pnpm add @synkro/next
+
+    # AI agent orchestration
+    pnpm add @synkro/agents
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    # Dashboard UI
+    yarn add @synkro/ui
+
+    # NestJS integration
+    yarn add @synkro/nestjs
+
+    # Next.js integration
+    yarn add @synkro/next
+
+    # AI agent orchestration
+    yarn add @synkro/agents
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside>
+  `@synkro/next` also requires `@synkro/ui` as a peer dependency, since it serves the dashboard through Next.js route handlers.
+</Aside>
+
+## Verify your installation
+
+Create a quick smoke test to confirm everything is wired up:
+
+```ts
+import { Synkro } from "@synkro/core";
+
+const synkro = await Synkro.start({ transport: "in-memory" });
+console.log("Synkro started successfully");
+await synkro.stop();
+```
+
+Run it with `npx tsx smoke.ts` (or your preferred TypeScript runner). If you see the success message, you are ready to move on to the [Quick Start](/getting-started/quick-start/).

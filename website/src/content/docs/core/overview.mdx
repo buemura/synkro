@@ -1,0 +1,86 @@
+---
+title: Overview
+description: A lightweight workflow and state machine orchestrator for Node.js applications.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+**@synkro/core** is a lightweight workflow and state machine orchestrator. It gives you pub/sub events, sequential workflows with conditional routing, retries with backoff, schema validation, middleware, scheduled events, and more — all backed by Redis or an in-memory transport.
+
+## When to use it
+
+- You need event-driven communication between services or modules.
+- You want multi-step workflows with branching, retries, and timeouts.
+- You need workflow chaining, cancellation, and state inspection at runtime.
+- You prefer a code-first orchestrator over heavyweight BPM tools.
+
+## Features
+
+| Feature | Description |
+|---|---|
+| **Events (pub/sub)** | Register handlers, publish events, remove handlers at runtime. |
+| **Workflows** | Sequential multi-step workflows with state persistence. |
+| **Conditional routing** | `onSuccess` / `onFailure` branching per step. |
+| **Workflow chaining** | Trigger follow-up workflows on completion or failure. |
+| **Retries with backoff** | Fixed or exponential backoff, jitter, retryable filter. |
+| **Schema validation** | Validate payloads at publish and dispatch time. |
+| **Event versioning** | Versioned events with automatic base-channel fanout. |
+| **Middleware** | Koa-style onion model wrapping every handler. |
+| **Scheduled events** | One-shot delays and recurring schedules. |
+| **Timeouts** | Per-workflow and per-step timeout enforcement. |
+| **Graceful shutdown** | Drain in-flight handlers before disconnecting. |
+| **Dead letter queue** | Failed messages stored for inspection and replay. |
+| **Workflow state query** | Inspect workflow progress at any time. |
+| **Workflow cancellation** | Cancel running workflows programmatically. |
+
+## Installation
+
+```bash
+npm install @synkro/core
+```
+
+## Quick start
+
+<Steps>
+
+1. **Install the package**
+
+   ```bash
+   npm install @synkro/core
+   ```
+
+2. **Create an instance and register a handler**
+
+   ```ts
+   import { Synkro } from "@synkro/core";
+
+   const synkro = await Synkro.start({
+     transport: "in-memory",
+   });
+
+   synkro.on("user:created", async (ctx) => {
+     console.log("New user:", ctx.payload);
+   });
+
+   await synkro.publish("user:created", { name: "Alice" });
+   ```
+
+3. **Shut down gracefully**
+
+   ```ts
+   await synkro.stop();
+   ```
+
+</Steps>
+
+<Aside type="tip">
+For production deployments, use `transport: "redis"` with a `connectionUrl` to get distributed locking, deduplication, and persistence.
+</Aside>
+
+## Next steps
+
+- [Events (Pub/Sub)](/core/events) — publish and subscribe to events.
+- [Workflows](/core/workflows) — build multi-step sequential workflows.
+- [API Reference](/core/api-reference) — full method and type reference.

@@ -1,0 +1,485 @@
+---
+title: API Reference
+description: Complete reference for all Synkro class methods, handler context, and TypeScript types.
+sidebar:
+  order: 14
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+## Synkro class
+
+### Synkro.start(options) <Badge text="static" variant="note" />
+
+Creates and initializes a Synkro instance.
+
+```ts
+static async start(options: SynkroOptions): Promise<Synkro>
+```
+
+```ts
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+});
+```
+
+---
+
+### synkro.on(eventType, handler, retry?)
+
+Registers a handler for the given event type.
+
+```ts
+on(eventType: string, handler: HandlerFunction, retry?: RetryConfig): void
+```
+
+```ts
+synkro.on("order:placed", async (ctx) => {
+  console.log(ctx.payload);
+}, { maxRetries: 3 });
+```
+
+---
+
+### synkro.off(eventType, handler?)
+
+Removes a handler. If `handler` is omitted, removes all handlers for the event type.
+
+```ts
+off(eventType: string, handler?: HandlerFunction): void
+```
+
+```ts
+synkro.off("order:placed", myHandler);
+synkro.off("order:placed"); // remove all
+```
+
+---
+
+### synkro.publish(event, payload?, requestId?)
+
+Publishes an event. If the event name matches a workflow, the workflow is started. Returns the `requestId`.
+
+```ts
+async publish(event: string, payload?: unknown, requestId?: string): Promise<string>
+```
+
+```ts
+const id = await synkro.publish("order:placed", { orderId: "abc" });
+```
+
+---
+
+### synkro.use(middleware)
+
+Adds a middleware function that wraps every handler execution.
+
+```ts
+use(middleware: MiddlewareFunction): void
+```
+
+```ts
+synkro.use(async (ctx, next) => {
+  const start = Date.now();
+  await next();
+  console.log(`${ctx.eventType}: ${Date.now() - start}ms`);
+});
+```
+
+---
+
+### synkro.publishDelayed(event, payload, delayMs)
+
+Publishes an event after a delay. Returns the `requestId` for the pending timer.
+
+```ts
+publishDelayed(event: string, payload: unknown, delayMs: number): string
+```
+
+```ts
+const id = synkro.publishDelayed("reminder:send", { userId: "u1" }, 60000);
+```
+
+---
+
+### synkro.schedule(eventType, intervalMs, payload?)
+
+Creates a recurring schedule that publishes an event at a fixed interval. Returns a `scheduleId`.
+
+```ts
+schedule(eventType: string, intervalMs: number, payload?: unknown): string
+```
+
+```ts
+const scheduleId = synkro.schedule("health:check", 30000);
+```
+
+---
+
+### synkro.unschedule(scheduleId)
+
+Cancels a recurring schedule. Returns `true` if the schedule was found and cancelled.
+
+```ts
+unschedule(scheduleId: string): boolean
+```
+
+```ts
+synkro.unschedule(scheduleId);
+```
+
+---
+
+### synkro.getWorkflowState(requestId, workflowName)
+
+Returns the current state of a workflow instance, or `null` if not found.
+
+```ts
+async getWorkflowState(requestId: string, workflowName: string): Promise<WorkflowState | null>
+```
+
+```ts
+const state = await synkro.getWorkflowState(requestId, "ProcessOrder");
+// { workflowName: "ProcessOrder", currentStep: 1, status: "running" }
+```
+
+---
+
+### synkro.cancelWorkflow(requestId, workflowName)
+
+Cancels a running workflow. Returns `true` if cancelled, `false` if not found or not running.
+
+```ts
+async cancelWorkflow(requestId: string, workflowName: string): Promise<boolean>
+```
+
+```ts
+await synkro.cancelWorkflow(requestId, "ProcessOrder");
+```
+
+---
+
+### synkro.getWorkflowGraph(workflowName)
+
+Returns a DAG representation of a workflow, or `null` if not found.
+
+```ts
+getWorkflowGraph(workflowName: string): WorkflowGraph | null
+```
+
+```ts
+const graph = synkro.getWorkflowGraph("ProcessOrder");
+```
+
+---
+
+### synkro.getEventMetrics(eventType)
+
+Returns event processing metrics.
+
+```ts
+async getEventMetrics(eventType: string): Promise<EventMetrics>
+```
+
+---
+
+### synkro.getDeadLetterItems(eventType, options?)
+
+Returns failed messages from the dead letter queue.
+
+```ts
+async getDeadLetterItems(eventType: string, options?: { limit?: number }): Promise<DeadLetterItem[]>
+```
+
+---
+
+### synkro.replayDeadLetterItem(item)
+
+Re-publishes a dead letter item.
+
+```ts
+async replayDeadLetterItem(item: DeadLetterItem): Promise<string>
+```
+
+---
+
+### synkro.clearDeadLetterQueue(eventType)
+
+Removes all items from the DLQ for a given event type.
+
+```ts
+async clearDeadLetterQueue(eventType: string): Promise<void>
+```
+
+---
+
+### synkro.introspect()
+
+Returns a full snapshot of registered events, workflows, schedules, and workflow graphs.
+
+```ts
+introspect(): SynkroIntrospection
+```
+
+---
+
+### synkro.stop()
+
+Gracefully shuts down: clears timers, drains in-flight handlers, and disconnects the transport.
+
+```ts
+async stop(): Promise<void>
+```
+
+```ts
+await synkro.stop();
+```
+
+---
+
+## Handler context
+
+### ctx.publish(event, payload?, requestId?)
+
+Publish a follow-up event from within a handler.
+
+```ts
+publish: (event: string, payload?: unknown, requestId?: string) => Promise<string>
+```
+
+### ctx.setPayload(data)
+
+Merge data into the current payload. Used in workflows to pass data between steps.
+
+```ts
+setPayload: (data: Record<string, unknown>) => void
+```
+
+---
+
+## Types
+
+### SynkroOptions
+
+```ts
+type SynkroOptions = {
+  transport?: "redis" | "in-memory" | TransportManager;
+  connectionUrl?: string;
+  debug?: boolean;
+  logFormat?: "text" | "json";
+  events?: SynkroEvent[];
+  workflows?: SynkroWorkflow[];
+  handlers?: object[];
+  retention?: RetentionConfig;
+  schemas?: Record<string, SchemaValidator>;
+  drainTimeout?: number;
+  deadLetterQueue?: boolean;
+  middlewares?: MiddlewareFunction[];
+};
+```
+
+### SynkroEvent
+
+```ts
+type SynkroEvent<T = unknown> = {
+  type: string;
+  handler: HandlerFunction<T>;
+  retry?: RetryConfig;
+  schema?: SchemaValidator;
+  filter?: EventFilter<T>;
+};
+```
+
+### SynkroWorkflow
+
+```ts
+type SynkroWorkflow = {
+  name: string;
+  steps: SynkroWorkflowStep[];
+  onComplete?: string;
+  onSuccess?: string;
+  onFailure?: string;
+  timeoutMs?: number;
+};
+```
+
+### SynkroWorkflowStep
+
+```ts
+type SynkroWorkflowStep = {
+  type: string;
+  handler?: HandlerFunction;
+  retry?: RetryConfig;
+  onSuccess?: string;
+  onFailure?: string;
+  timeoutMs?: number;
+};
+```
+
+### HandlerCtx
+
+```ts
+type HandlerCtx<T = unknown> = {
+  requestId: string;
+  payload: T;
+  publish: PublishFunction;
+  setPayload: (data: Record<string, unknown>) => void;
+};
+```
+
+### HandlerFunction
+
+```ts
+type HandlerFunction<T = unknown> = (ctx: HandlerCtx<T>) => void | Promise<void>;
+```
+
+### PublishFunction
+
+```ts
+type PublishFunction = (
+  event: string,
+  payload?: unknown,
+  requestId?: string,
+) => Promise<string>;
+```
+
+### RetryConfig
+
+```ts
+type RetryConfig = {
+  maxRetries: number;
+  delayMs?: number;
+  backoff?: "fixed" | "exponential";
+  jitter?: boolean;
+  retryable?: (error: unknown) => boolean;
+};
+```
+
+### SchemaValidator
+
+```ts
+type SchemaValidator = (payload: unknown) => void;
+```
+
+### MiddlewareCtx
+
+```ts
+type MiddlewareCtx<T = unknown> = HandlerCtx<T> & {
+  eventType: string;
+};
+```
+
+### MiddlewareFunction
+
+```ts
+type MiddlewareFunction = (
+  ctx: MiddlewareCtx,
+  next: () => Promise<void>,
+) => Promise<void>;
+```
+
+### WorkflowState
+
+```ts
+type WorkflowState = {
+  workflowName: string;
+  currentStep: number;
+  status: "running" | "completed" | "failed" | "cancelled";
+};
+```
+
+### WorkflowGraph
+
+```ts
+type WorkflowGraph = {
+  workflowName: string;
+  nodes: WorkflowGraphNode[];
+  edges: WorkflowGraphEdge[];
+};
+```
+
+### WorkflowGraphNode
+
+```ts
+type WorkflowGraphNode = {
+  id: string;
+  type: "step";
+  label: string;
+  meta?: { retry?: RetryConfig; timeoutMs?: number };
+};
+```
+
+### WorkflowGraphEdge
+
+```ts
+type WorkflowGraphEdge = {
+  from: string;
+  to: string;
+  label: "next" | "onSuccess" | "onFailure";
+};
+```
+
+### ScheduleInfo
+
+```ts
+type ScheduleInfo = {
+  scheduleId: string;
+  eventType: string;
+  intervalMs: number;
+  payload?: unknown;
+  createdAt: string;
+};
+```
+
+### EventMetrics
+
+```ts
+type EventMetrics = {
+  type: string;
+  received: number;
+  completed: number;
+  failed: number;
+};
+```
+
+### DeadLetterItem
+
+```ts
+type DeadLetterItem = {
+  eventType: string;
+  requestId: string;
+  payload: unknown;
+  errors: Array<{ message: string; name?: string }>;
+  failedAt: string;
+  attempts: number;
+};
+```
+
+### RetentionConfig
+
+```ts
+type RetentionConfig = {
+  lockTtl?: number;
+  dedupTtl?: number;
+  stateTtl?: number;
+  metricsTtl?: number;
+};
+```
+
+### SynkroIntrospection
+
+```ts
+type SynkroIntrospection = {
+  events: EventInfo[];
+  workflows: WorkflowInfo[];
+  schedules: ScheduleInfo[];
+  graphs: WorkflowGraph[];
+};
+```
+
+### EventFilter
+
+```ts
+type EventFilter<T = unknown> = (payload: T) => boolean;
+```

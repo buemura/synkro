@@ -1,0 +1,151 @@
+---
+title: Tools
+description: Define tools that agents can call during their reasoning loop.
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Tools give agents the ability to take actions — search the web, query a database, call an API, or perform calculations. During the ReAct loop, the LLM decides which tools to call; `@synkro/agents` executes them automatically and feeds the results back.
+
+## createTool
+
+Use the `createTool` factory to define a tool with typed input and output.
+
+```ts
+import { createTool } from "@synkro/agents";
+
+const calculator = createTool({
+  name: "calculator",
+  description: "Evaluate a mathematical expression",
+  parameters: {
+    type: "object",
+    properties: {
+      expression: { type: "string", description: "Math expression to evaluate" },
+    },
+    required: ["expression"],
+  },
+  execute: async (input: { expression: string }) => {
+    const result = Function(`"use strict"; return (${input.expression})`)();
+    return { result: Number(result) };
+  },
+});
+```
+
+## Tool type
+
+```ts
+type Tool<TInput = unknown, TOutput = unknown> = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>; // JSON Schema
+  execute: (input: TInput, ctx: AgentContext) => Promise<TOutput>;
+};
+```
+
+| Field | Description |
+|---|---|
+| `name` | Unique tool name. This is what the LLM sees and calls by name. |
+| `description` | Natural language description. Write it for the LLM — be specific about what the tool does and when to use it. |
+| `parameters` | JSON Schema object describing the tool's input. The LLM generates arguments matching this schema. |
+| `execute` | Async function that runs when the agent calls this tool. Receives parsed input and an `AgentContext`. |
+
+## AgentContext
+
+The `execute` function receives an `AgentContext` as its second argument. This extends Synkro's `HandlerCtx` with agent-specific fields.
+
+```ts
+type AgentContext = HandlerCtx & {
+  agentName: string;   // Name of the running agent
+  runId: string;       // Current run identifier
+  tokenUsage: TokenUsage; // Cumulative token counts so far
+  delegate: (agentName: string, input: string) => Promise<AgentRunResult>;
+};
+```
+
+Use the context to access Synkro features from within a tool:
+
+```ts
+const notifyTool = createTool({
+  name: "notify_user",
+  description: "Send a notification to a user",
+  parameters: {
+    type: "object",
+    properties: {
+      userId: { type: "string" },
+      message: { type: "string" },
+    },
+    required: ["userId", "message"],
+  },
+  execute: async (input: { userId: string; message: string }, ctx) => {
+    // Publish a Synkro event from within a tool
+    await ctx.publish("notification:send", {
+      userId: input.userId,
+      message: input.message,
+    });
+    return { sent: true };
+  },
+});
+```
+
+<Aside type="note">
+`ctx.publish` and `ctx.setPayload` are fully functional when the agent runs as a Synkro handler (via `agent.asHandler()`). In standalone mode, `publish` is a no-op and `setPayload` does nothing.
+</Aside>
+
+## Tool results
+
+Each tool execution produces a `ToolResult`:
+
+```ts
+type ToolResult = {
+  toolCallId: string;  // ID from the LLM's tool call
+  name: string;        // Tool name
+  result: unknown;     // Return value from execute()
+  error?: string;      // Error message if execute() threw
+  durationMs: number;  // Execution time in milliseconds
+};
+```
+
+If a tool's `execute` function throws, the error message is captured in `ToolResult.error` and sent back to the LLM as `"Error: ..."`. The agent can then decide to retry, use a different tool, or respond with an explanation.
+
+## Example: web search tool
+
+```ts
+const webSearch = createTool({
+  name: "web_search",
+  description: "Search the web and return relevant results. Use for current events or factual questions.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Search query" },
+      maxResults: { type: "number", description: "Max results to return (default 5)" },
+    },
+    required: ["query"],
+  },
+  execute: async (input: { query: string; maxResults?: number }) => {
+    const response = await fetch(
+      `https://api.search.example/search?q=${encodeURIComponent(input.query)}&limit=${input.maxResults ?? 5}`
+    );
+    return response.json();
+  },
+});
+```
+
+## Registering tools with an agent
+
+Pass tools in the `tools` array when creating an agent:
+
+```ts
+import { createAgent, OpenAIProvider } from "@synkro/agents";
+
+const agent = createAgent({
+  name: "assistant",
+  systemPrompt: "You are a helpful assistant with access to web search and a calculator.",
+  provider: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY! }),
+  model: { model: "gpt-4o" },
+  tools: [webSearch, calculator],
+});
+```
+
+The agent automatically converts tools into the provider's expected format (OpenAI function calling, Anthropic tool use, or Gemini function declarations) and executes them when the LLM requests it.

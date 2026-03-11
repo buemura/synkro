@@ -1,0 +1,43 @@
+---
+title: Dashboard UI
+description: A framework-agnostic dashboard for monitoring Synkro events and workflows.
+sidebar:
+  order: 1
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+`@synkro/ui` provides a built-in dashboard that mounts on any Node.js HTTP endpoint. It gives you full visibility into your event-driven system with zero external dependencies.
+
+## Features
+
+- **Events overview** — see all registered events with retry configuration at a glance
+- **Event detail** — drill into per-event metrics: received, completed, and failed counts
+- **Workflows overview** — list all workflows with step counts and callback <Badge text="callback" variant="note" /> badges
+- **Workflow detail** — interactive branching SVG flow diagram with color-coded outcomes (<span style="color:green">green = success</span>, <span style="color:red">red = failure</span>)
+- **Stats at a glance** — top-level counters for quick health checks
+- **Pagination** — handles large event and workflow lists
+- **Framework-agnostic** — works with Express, Fastify, raw `node:http`, or any framework that exposes `IncomingMessage` / `ServerResponse`
+- **Zero dependencies** — the dashboard HTML is self-contained; no client-side bundles to install
+
+## Screenshots
+
+![Dashboard](/screenshots/dashboard-screenshot.png)
+
+![Event Detail](/screenshots/event-detail-screenshot.png)
+
+![Workflow Detail](/screenshots/workflow-detail-screenshot.png)
+
+## Installation
+
+```bash
+npm install @synkro/ui
+```
+
+<Aside>
+  `@synkro/ui` has a single peer dependency: `@synkro/core ^0.15.0`.
+</Aside>
+
+## Next steps
+
+Head to the [Setup guide](/ui/setup/) to mount the dashboard in your application, or jump straight to the [API Reference](/ui/api-reference/).

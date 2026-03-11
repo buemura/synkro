@@ -1,0 +1,72 @@
+---
+title: Setup
+description: Create a Synkro client instance and configure Next.js for server-side event handling.
+sidebar:
+  order: 2
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+<Steps>
+
+1. **Create the Synkro client**
+
+   Create a shared module (e.g. `lib/synkro.ts`) that exports a singleton client. The instance is initialized lazily on first call and survives HMR in development.
+
+   ```typescript
+   // lib/synkro.ts
+   import { createSynkro } from "@synkro/next";
+
+   export const synkro = createSynkro({
+     transport: "redis",
+     connectionUrl: process.env.REDIS_URL!,
+     workflows: [
+       {
+         name: "order-fulfillment",
+         triggerEvent: "order.created",
+         steps: [
+           {
+             type: "validate",
+             handler: async (payload) => {
+               // validate order
+               return payload;
+             },
+             onSuccess: "process",
+           },
+           {
+             type: "process",
+             handler: async (payload) => {
+               // process payment
+               return { ...payload, processed: true };
+             },
+           },
+         ],
+       },
+     ],
+   });
+   ```
+
+2. **Configure Next.js**
+
+   If you are using the Redis transport, add `ioredis` to `serverExternalPackages` so Next.js does not attempt to bundle it.
+
+   ```typescript
+   // next.config.ts
+   import type { NextConfig } from "next";
+
+   const nextConfig: NextConfig = {
+     serverExternalPackages: ["ioredis"],
+   };
+
+   export default nextConfig;
+   ```
+
+3. **Set up the dashboard (optional)**
+
+   Import `createDashboardHandler` and wire it to a catch-all route. See [Route Handlers](/next/route-handlers/) for the full example.
+
+</Steps>
+
+<Aside type="tip">
+  The `createSynkro` client stores the underlying `Synkro` instance on `globalThis` so that it persists across hot reloads in `next dev`. In production, it behaves as a normal singleton.
+</Aside>

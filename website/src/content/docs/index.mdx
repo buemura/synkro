@@ -1,0 +1,89 @@
+---
+title: Synkro
+description: Lightweight event-driven workflow orchestrator for Node.js
+template: splash
+hero:
+  tagline: Lightweight event-driven workflow orchestrator for Node.js. Define events, workflows, and state machines — backed by Redis or in-memory.
+  image:
+    html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none"><defs><linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" /><stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" /></linearGradient><linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:0.6" /><stop offset="100%" style="stop-color:#a78bfa;stop-opacity:0.6" /></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><path d="M 120 80 C 170 80, 170 150, 200 150" stroke="url(#grad2)" stroke-width="2" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" values="20;0" dur="2s" repeatCount="indefinite"/></path><path d="M 120 220 C 170 220, 170 150, 200 150" stroke="url(#grad2)" stroke-width="2" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" values="20;0" dur="2s" repeatCount="indefinite"/></path><path d="M 240 150 C 270 150, 270 80, 300 80" stroke="url(#grad2)" stroke-width="2" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" values="20;0" dur="2.5s" repeatCount="indefinite"/></path><path d="M 240 150 C 270 150, 270 220, 300 220" stroke="url(#grad2)" stroke-width="2" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" values="20;0" dur="2.5s" repeatCount="indefinite"/></path><path d="M 240 150 L 300 150" stroke="url(#grad2)" stroke-width="2" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" values="20;0" dur="2s" repeatCount="indefinite"/></path><g filter="url(#glow)"><rect x="60" y="60" width="60" height="40" rx="8" fill="#1e1b4b" stroke="#6366f1" stroke-width="1.5"/><text x="90" y="84" text-anchor="middle" font-family="system-ui" font-size="10" fill="#a5b4fc">Event</text></g><g filter="url(#glow)"><rect x="60" y="200" width="60" height="40" rx="8" fill="#1e1b4b" stroke="#6366f1" stroke-width="1.5"/><text x="90" y="224" text-anchor="middle" font-family="system-ui" font-size="10" fill="#a5b4fc">Event</text></g><g filter="url(#glow)"><rect x="170" y="125" width="70" height="50" rx="12" fill="url(#grad1)" stroke="#a78bfa" stroke-width="1"/><text x="205" y="146" text-anchor="middle" font-family="system-ui" font-size="10" font-weight="700" fill="#ffffff">Synkro</text><text x="205" y="162" text-anchor="middle" font-family="system-ui" font-size="8" fill="#e0e7ff">orchestrator</text></g><g filter="url(#glow)"><rect x="280" y="60" width="60" height="40" rx="8" fill="#1e1b4b" stroke="#8b5cf6" stroke-width="1.5"/><text x="310" y="84" text-anchor="middle" font-family="system-ui" font-size="10" fill="#c4b5fd">Step 1</text></g><g filter="url(#glow)"><rect x="280" y="130" width="60" height="40" rx="8" fill="#1e1b4b" stroke="#8b5cf6" stroke-width="1.5"/><text x="310" y="154" text-anchor="middle" font-family="system-ui" font-size="10" fill="#c4b5fd">Step 2</text></g><g filter="url(#glow)"><rect x="280" y="200" width="60" height="40" rx="8" fill="#1e1b4b" stroke="#8b5cf6" stroke-width="1.5"/><text x="310" y="224" text-anchor="middle" font-family="system-ui" font-size="10" fill="#c4b5fd">Step 3</text></g><circle r="3" fill="#a78bfa"><animateMotion dur="2s" repeatCount="indefinite" path="M 120 80 C 170 80, 170 150, 200 150"/></circle><circle r="3" fill="#a78bfa"><animateMotion dur="2.5s" repeatCount="indefinite" path="M 240 150 C 270 150, 270 80, 300 80"/></circle><circle r="3" fill="#8b5cf6"><animateMotion dur="2s" repeatCount="indefinite" path="M 240 150 L 300 150"/></circle></svg>'
+  actions:
+    - text: Get Started
+      link: /getting-started/installation/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/buemura/synkro
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Packages
+
+<CardGrid>
+  <LinkCard
+    title="@synkro/core"
+    description="Core orchestrator with Redis and in-memory transports for event-driven workflows and state machine orchestration."
+    href="/core/overview/"
+  />
+  <LinkCard
+    title="@synkro/ui"
+    description="Web dashboard for visualizing events, workflows, and message metrics in real time."
+    href="/ui/overview/"
+  />
+  <LinkCard
+    title="@synkro/nestjs"
+    description="NestJS integration with decorators, dependency injection, and async module configuration."
+    href="/nestjs/overview/"
+  />
+  <LinkCard
+    title="@synkro/next"
+    description="Next.js integration with lazy-loading singleton, route handlers, and serverless support."
+    href="/next/overview/"
+  />
+  <LinkCard
+    title="@synkro/agents"
+    description="AI agent orchestration with tools, memory, and multi-agent patterns on top of Synkro's event engine."
+    href="/agents/overview/"
+  />
+</CardGrid>
+
+## Quick Example
+
+Get started in under 10 lines of code:
+
+```ts
+import { Synkro } from "@synkro/core";
+
+const synkro = await Synkro.start({
+  transport: "in-memory",
+  events: [
+    {
+      type: "UserSignedUp",
+      handler: async (ctx) => {
+        console.log("New user:", ctx.payload);
+      },
+    },
+  ],
+});
+
+await synkro.publish("UserSignedUp", { email: "user@example.com" });
+```
+
+## Why Synkro?
+
+<CardGrid>
+  <Card title="Simple Configuration" icon="setting">
+    Define events and workflows via plain configuration objects. No complex setup, no boilerplate — just describe what you want and Synkro handles the rest.
+  </Card>
+  <Card title="Production Ready" icon="rocket">
+    Redis-backed transport with distributed locking, deduplication, retry with backoff, dead letter queues, and graceful shutdown. Battle-tested for real workloads.
+  </Card>
+  <Card title="Framework Agnostic" icon="puzzle">
+    First-class integrations for NestJS, Next.js, and raw Node.js HTTP. Or bring your own framework — Synkro's core has zero framework dependencies.
+  </Card>
+  <Card title="AI Agent Ready" icon="star">
+    Build LLM-powered agents with tools, memory, and multi-agent patterns. Bridge agents into Synkro's event system for distributed orchestration with full guarantees.
+  </Card>
+</CardGrid>

@@ -1,0 +1,78 @@
+---
+title: Setup
+description: Mount the Synkro dashboard on Express, Fastify, or raw Node.js HTTP.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem, Steps, Aside } from '@astrojs/starlight/components';
+
+<Steps>
+
+1. **Create a Synkro instance**
+
+   The dashboard handler needs a running `Synkro` instance so it can query event metadata and metrics.
+
+   ```typescript
+   import { Synkro } from "@synkro/core";
+
+   const synkro = await Synkro.start({
+     transport: "redis",
+     connectionUrl: "redis://localhost:6379",
+     // ... events and workflows
+   });
+   ```
+
+2. **Mount the dashboard handler**
+
+   Import `createDashboardHandler` and wire it into your HTTP framework of choice.
+
+</Steps>
+
+## Framework examples
+
+<Tabs>
+  <TabItem label="Express">
+    ```typescript
+    import express from "express";
+    import { createDashboardHandler } from "@synkro/ui";
+
+    const app = express();
+
+    app.use("/synkro", createDashboardHandler(synkro, { basePath: "/synkro" }));
+
+    app.listen(3000);
+    ```
+  </TabItem>
+
+  <TabItem label="Node.js HTTP">
+    ```typescript
+    import http from "node:http";
+    import { createDashboardHandler } from "@synkro/ui";
+
+    const server = http.createServer(createDashboardHandler(synkro));
+
+    server.listen(3000);
+    ```
+  </TabItem>
+
+  <TabItem label="Fastify">
+    ```typescript
+    import Fastify from "fastify";
+    import { createDashboardHandler } from "@synkro/ui";
+
+    const app = Fastify();
+    const handler = createDashboardHandler(synkro, { basePath: "/synkro" });
+
+    app.get("/synkro/*", (req, reply) => handler(req.raw, reply.raw));
+
+    app.listen({ port: 3000 });
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+  When mounting under a sub-path (e.g. `/synkro`), always pass the same path as `basePath` so the handler can correctly resolve its internal routes.
+</Aside>
+
+Once the server is running, open `http://localhost:3000/synkro` in your browser to access the dashboard.

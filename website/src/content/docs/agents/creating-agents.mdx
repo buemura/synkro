@@ -1,0 +1,145 @@
+---
+title: Creating Agents
+description: How to create, configure, and run AI agents with @synkro/agents.
+sidebar:
+  order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## createAgent
+
+The `createAgent` factory creates an `Agent` instance from a configuration object.
+
+```ts
+import { createAgent, OpenAIProvider } from "@synkro/agents";
+
+const agent = createAgent({
+  name: "research-assistant",
+  description: "Answers research questions using web search",
+  systemPrompt: "You are a research assistant. Use your tools to find accurate answers.",
+  provider: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY! }),
+  model: { model: "gpt-4o", temperature: 0.2 },
+});
+```
+
+## AgentConfig
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `name` | `string` | *required* | Unique agent name, used for memory keys and logging. |
+| `description` | `string` | — | Human-readable description of what the agent does. |
+| `systemPrompt` | `string` | *required* | System message sent at the start of every conversation. |
+| `provider` | `ModelProvider` | *required* | LLM provider instance (OpenAI, Anthropic, Gemini, or custom). |
+| `model` | `ModelOptions` | *required* | Model configuration: `model` name, `temperature`, `maxTokens`. |
+| `tools` | `Tool[]` | `[]` | Tools the agent can call during its ReAct loop. |
+| `memory` | `AgentMemory` | — | Memory backend for persisting conversations across runs. |
+| `maxIterations` | `number` | `10` | Maximum ReAct loop iterations before returning `"max_iterations"`. |
+| `tokenBudget` | `number` | — | Maximum total tokens before returning `"token_budget_exceeded"`. |
+| `retry` | `RetryConfig` | — | Retry configuration (from `@synkro/core`) for the agent handler. |
+| `onTokenUsage` | `(usage: TokenUsage) => void` | — | Callback fired after each LLM call with cumulative token counts. |
+| `registry` | `AgentRegistry` | — | Registry for multi-agent delegation via `ctx.delegate()`. |
+
+## Running an agent
+
+Call `agent.run(input, options?)` to execute the ReAct loop. The agent will call the LLM, execute any tool calls, feed results back, and repeat until the model stops calling tools or a guardrail triggers.
+
+```ts
+const result = await agent.run("Summarize the latest news on AI regulation");
+```
+
+### AgentRunOptions
+
+| Field | Type | Description |
+|---|---|---|
+| `requestId` | `string` | Custom run ID. Defaults to a random UUID. Also used as the memory key. |
+| `payload` | `unknown` | Additional payload passed through to tool context. |
+
+### AgentRunResult
+
+```ts
+type AgentRunResult = {
+  agentName: string;       // Name of the agent
+  runId: string;           // Unique run identifier
+  output: string;          // Final assistant response text
+  messages: Message[];     // Full conversation history (excluding system message)
+  toolCalls: ToolResult[]; // All tool executions with results and timing
+  tokenUsage: TokenUsage;  // Cumulative token counts
+  status:
+    | "completed"              // Agent finished normally
+    | "failed"                 // LLM call threw an error
+    | "max_iterations"         // Hit maxIterations limit
+    | "token_budget_exceeded"; // Hit tokenBudget limit
+};
+```
+
+## Full example
+
+```ts
+import {
+  createAgent,
+  createTool,
+  OpenAIProvider,
+  ConversationMemory,
+} from "@synkro/agents";
+import { Synkro } from "@synkro/core";
+
+const synkro = await Synkro.start({ transport: "redis", connectionUrl: "redis://localhost:6379" });
+
+const searchTool = createTool({
+  name: "web_search",
+  description: "Search the web for information",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Search query" },
+    },
+    required: ["query"],
+  },
+  execute: async (input: { query: string }) => {
+    // Your search implementation
+    return { results: [`Result for: ${input.query}`] };
+  },
+});
+
+const agent = createAgent({
+  name: "researcher",
+  systemPrompt: "You are a research assistant. Use web_search to find answers.",
+  provider: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY! }),
+  model: { model: "gpt-4o", temperature: 0.3, maxTokens: 2048 },
+  tools: [searchTool],
+  memory: new ConversationMemory({ transport: synkro.transport }),
+  maxIterations: 5,
+  tokenBudget: 10_000,
+  onTokenUsage: (usage) => {
+    console.log(`Tokens used: ${usage.totalTokens}`);
+  },
+});
+
+// First run
+const result = await agent.run("What are the latest AI regulations in the EU?", {
+  requestId: "session-123",
+});
+
+console.log(result.status);     // "completed"
+console.log(result.output);     // Agent's final answer
+console.log(result.toolCalls);  // [{ name: "web_search", ... }]
+
+// Follow-up (resumes conversation from memory)
+const followUp = await agent.run("How does that compare to the US?", {
+  requestId: "session-123",
+});
+```
+
+<Aside type="caution">
+The `tokenBudget` is checked **before** each LLM call, not mid-response. A single response may exceed the budget. Use it as a soft safety net, not a hard limit.
+</Aside>
+
+## Status values
+
+| Status | Meaning |
+|---|---|
+| `"completed"` | The agent finished its reasoning and returned a final answer. |
+| `"failed"` | The LLM provider returned an error. The `output` field contains the error message. |
+| `"max_iterations"` | The agent exhausted `maxIterations` without reaching a final answer. |
+| `"token_budget_exceeded"` | Cumulative token usage reached the `tokenBudget` limit. |

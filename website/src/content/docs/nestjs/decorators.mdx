@@ -1,0 +1,117 @@
+---
+title: Decorators
+description: Use @OnEvent and @OnWorkflowStep to register Synkro handlers on NestJS service methods.
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## `@OnEvent(type, retry?)`
+
+Registers a method as a standalone event handler. The method is discovered at module init and attached to the Synkro instance via `synkro.on()`.
+
+```typescript
+import { Injectable } from "@nestjs/common";
+import { OnEvent } from "@synkro/nestjs";
+
+@Injectable()
+export class NotificationHandler {
+  @OnEvent("user.signup", { maxRetries: 3, retryDelay: 1000 })
+  async handleSignup(payload: { email: string }) {
+    await sendWelcomeEmail(payload.email);
+  }
+
+  @OnEvent("order.completed")
+  async handleOrderCompleted(payload: { orderId: string }) {
+    await sendOrderConfirmation(payload.orderId);
+  }
+}
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `type` | `string` | The event type to listen for. |
+| `retry` | `RetryConfig` | Optional retry configuration (`maxRetries`, `retryDelay`). |
+
+<Aside>
+  The class must be registered as a NestJS provider (e.g. listed in a module's `providers` array or marked `@Injectable()` in a scanned module) for the decorator to be discovered.
+</Aside>
+
+---
+
+## `@OnWorkflowStep(workflow, step)`
+
+Binds a method as the handler for a specific step in a workflow. This replaces inline `handler` functions in the workflow definition.
+
+```typescript
+import { Injectable } from "@nestjs/common";
+import { OnWorkflowStep } from "@synkro/nestjs";
+
+@Injectable()
+export class OrderWorkflowHandler {
+  @OnWorkflowStep("order-fulfillment", "validate-inventory")
+  async validateInventory(payload: { items: string[] }) {
+    // check stock levels
+    return { available: true };
+  }
+
+  @OnWorkflowStep("order-fulfillment", "charge-payment")
+  async chargePayment(payload: { orderId: string; amount: number }) {
+    // process payment
+    return { transactionId: "txn_123" };
+  }
+
+  @OnWorkflowStep("order-fulfillment", "ship-order")
+  async shipOrder(payload: { orderId: string }) {
+    // create shipping label
+    return { trackingNumber: "TRACK_456" };
+  }
+}
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `workflow` | `string` | The `name` of the workflow this step belongs to. |
+| `step` | `string` | The `type` of the step within that workflow. |
+
+---
+
+## Workflow definition with decorators
+
+When using `@OnWorkflowStep`, define your workflow steps **without** inline `handler` functions. The module will patch in the decorated methods at startup.
+
+```typescript
+import type { NestSynkroWorkflow } from "@synkro/nestjs";
+
+export const orderFulfillmentWorkflow: NestSynkroWorkflow = {
+  name: "order-fulfillment",
+  triggerEvent: "order.created",
+  steps: [
+    {
+      type: "validate-inventory",
+      onSuccess: "charge-payment",
+      onFailure: "notify-out-of-stock",
+    },
+    {
+      type: "charge-payment",
+      onSuccess: "ship-order",
+      onFailure: "refund-payment",
+    },
+    {
+      type: "ship-order",
+      retry: { maxRetries: 3, retryDelay: 2000 },
+    },
+  ],
+};
+```
+
+The `NestSynkroWorkflow` type is identical to the core `SynkroWorkflow` type except that `handler` is optional on each step — allowing handlers to be provided via decorators instead.
+
+<Aside type="caution">
+  Every step must have a handler, either inline or via `@OnWorkflowStep`. If a step is missing both at startup, the module throws an error immediately rather than failing silently at runtime.
+</Aside>

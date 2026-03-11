@@ -1,0 +1,86 @@
+---
+title: Event Versioning
+description: Version events and route them to both versioned and base channel handlers.
+sidebar:
+  order: 8
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+As your system evolves, event schemas change. Synkro supports versioned events so that handlers for older versions continue to receive events alongside handlers for specific versions.
+
+## Naming convention
+
+Versioned events follow the pattern `base:event:vN`:
+
+```
+user:created        ← base (unversioned)
+user:created:v1     ← version 1
+user:created:v2     ← version 2
+```
+
+## Fanout behavior
+
+When you publish a versioned event, Synkro delivers the message to **both** the versioned channel and the base channel:
+
+```ts
+await synkro.publish("user:created:v2", { id: "u1", name: "Alice", role: "admin" });
+```
+
+This triggers:
+1. All handlers registered for `user:created:v2`.
+2. All handlers registered for `user:created` (the base channel).
+
+This lets you register a catch-all handler on the base event while also having version-specific handlers:
+
+```ts
+// Receives ALL versions
+synkro.on("user:created", async (ctx) => {
+  console.log("User event (any version):", ctx.payload);
+});
+
+// Receives only v2
+synkro.on("user:created:v2", async (ctx) => {
+  console.log("User event v2:", ctx.payload);
+});
+```
+
+<Aside type="note">
+When a base handler receives a versioned event, the payload includes a `_version` field indicating the original version number.
+</Aside>
+
+## Utility functions
+
+Synkro exports two utility functions for working with versioned events:
+
+### parseEventType
+
+Parses an event type string into its components:
+
+```ts
+import { parseEventType } from "@synkro/core";
+
+parseEventType("user:created:v2");
+// { base: "user:created", version: 2, raw: "user:created:v2" }
+
+parseEventType("user:created");
+// { base: "user:created", version: null, raw: "user:created" }
+```
+
+### isVersionedEvent
+
+Returns `true` if the event type contains a version suffix:
+
+```ts
+import { isVersionedEvent } from "@synkro/core";
+
+isVersionedEvent("user:created:v2"); // true
+isVersionedEvent("user:created");    // false
+```
+
+## Migration strategy
+
+1. Add a new handler for `user:created:v2` with the updated schema.
+2. Keep the existing `user:created:v1` handler (or the base handler) running.
+3. Publishers migrate to emitting `user:created:v2` at their own pace.
+4. Once all publishers have migrated, retire the old handler.

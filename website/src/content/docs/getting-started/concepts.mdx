@@ -1,0 +1,145 @@
+---
+title: Core Concepts
+description: Understand the building blocks of Synkro — events, workflows, transports, and handler context.
+sidebar:
+  order: 3
+---
+
+import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## Events vs Workflows
+
+Synkro offers two primary abstractions for organizing your application logic.
+
+<CardGrid>
+  <Card title="Events" icon="rocket">
+    Simple pub/sub handlers. You publish a message with a type, and the matching handler executes. Each event is independent — there is no ordering guarantee between different event types.
+  </Card>
+  <Card title="Workflows" icon="list-format">
+    Multi-step sequential pipelines. A workflow defines an ordered list of steps that execute one after another. State is persisted between steps, and the workflow tracks its overall progress.
+  </Card>
+</CardGrid>
+
+### When to use which
+
+| | Events | Workflows |
+|---|---|---|
+| **Pattern** | Fire-and-forget, fan-out | Sequential pipeline |
+| **State** | Stateless | Persisted across steps |
+| **Use cases** | Notifications, logging, cache invalidation | Order processing, onboarding flows, ETL pipelines |
+
+## Transports
+
+A transport is the abstraction layer that handles message delivery and state storage. You choose a transport when calling `Synkro.start()`.
+
+```ts
+// Development
+const synkro = await Synkro.start({ transport: "in-memory" });
+
+// Production
+const synkro = await Synkro.start({
+  transport: "redis",
+  connectionUrl: "redis://localhost:6379",
+});
+```
+
+- **In-memory** -- Single-instance only. Uses an internal event emitter and `Map`-based state storage. No external dependencies. Ideal for development and testing.
+- **Redis** -- Production-ready. Uses Redis Streams for message delivery and Redis keys for state, locks, and deduplication. Supports multiple instances consuming from the same stream.
+
+See the [Transport System](/architecture/transport-system/) page for a deep dive.
+
+## requestId
+
+Every event publication and workflow execution is associated with a `requestId`. This is a correlation ID that ties together all steps in a workflow or traces a single event through the system.
+
+- **Auto-generated**: By default, Synkro generates a UUID v4 for each `publish()` call.
+- **User-provided**: Pass your own ID to correlate with external systems.
+
+```ts
+// Auto-generated
+await synkro.publish("UserSignedUp", { email: "user@example.com" });
+
+// User-provided
+await synkro.publish("UserSignedUp", { email: "user@example.com" }, {
+  requestId: "req-abc-123",
+});
+```
+
+In workflows, the same `requestId` flows through every step, making it straightforward to trace and debug the full pipeline.
+
+## Handler context (ctx)
+
+Every event and workflow step handler receives a context object with the following properties:
+
+```ts
+handler: async (ctx) => {
+  ctx.requestId;    // string — correlation ID for this execution
+  ctx.payload;      // unknown — the data published with the event
+  ctx.publish();    // emit another event from within this handler
+  ctx.setPayload(); // merge data into the payload for subsequent workflow steps
+};
+```
+
+### ctx.publish()
+
+Emit additional events from inside a handler. This is how you chain side effects or trigger downstream processes.
+
+```ts
+handler: async (ctx) => {
+  const user = ctx.payload as { email: string };
+  // Trigger a follow-up event
+  await ctx.publish("SendWelcomeEmail", { to: user.email });
+};
+```
+
+### ctx.setPayload()
+
+In workflows, use `setPayload()` to pass data from one step to the next. The object you provide is **merged** into the existing payload.
+
+```ts
+steps: [
+  {
+    type: "ValidateStock",
+    handler: async (ctx) => {
+      const available = true;
+      ctx.setPayload({ stockAvailable: available });
+    },
+  },
+  {
+    type: "ProcessPayment",
+    handler: async (ctx) => {
+      // ctx.payload now includes { stockAvailable: true }
+      const payload = ctx.payload as { stockAvailable: boolean };
+      if (!payload.stockAvailable) return;
+      console.log("Charging customer...");
+    },
+  },
+];
+```
+
+## State machine
+
+Workflows are backed by a state machine that the transport layer persists automatically. Each workflow execution tracks:
+
+| Property | Description |
+|---|---|
+| `currentStep` | The index of the step currently being executed |
+| `status` | One of `running`, `completed`, `failed`, or `cancelled` |
+| `requestId` | The correlation ID for this execution |
+| `payload` | The current accumulated payload |
+
+The state machine transitions look like this:
+
+```
+publish() → running → step 1 → step 2 → ... → step N → completed
+                ↓
+             (error)
+                ↓
+             failed
+```
+
+<Aside>
+  Workflow state is persisted via the transport. With the in-memory transport, state is lost when the process exits. With Redis, state survives restarts and can be inspected externally.
+</Aside>
+
+You never interact with the state machine directly -- Synkro manages it for you. The state is available through the dashboard (`@synkro/ui`) and the `synkro.introspect()` API for programmatic access.
