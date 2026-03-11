@@ -27,7 +27,7 @@
     "dashboard"
   ],
   "author": "buemura",
-  "license": "ISC",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/buemura/synkro.git",
