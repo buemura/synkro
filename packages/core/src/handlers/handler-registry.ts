@@ -297,9 +297,19 @@ export class HandlerRegistry {
         }
       }
 
+      // Use the updated payload from the last successful handler (reflects setPayload changes)
+      let updatedPayload: unknown = event.payload;
+      for (let i = results.length - 1; i >= 0; i--) {
+        const r = results[i]!;
+        if (r.status === "fulfilled") {
+          updatedPayload = r.value;
+          break;
+        }
+      }
+
       const eventPayload: Record<string, unknown> = {
         requestId: event.requestId,
-        payload: event.payload,
+        payload: updatedPayload,
       };
 
       const errors = !allSucceeded
@@ -358,7 +368,7 @@ export class HandlerRegistry {
     eventType: string,
     entry: HandlerEntry,
     event: { requestId: string; payload: unknown },
-  ): Promise<void> {
+  ): Promise<unknown> {
     const maxRetries = entry.retry?.maxRetries ?? 0;
 
     const ctx: HandlerCtx = {
@@ -384,7 +394,7 @@ export class HandlerRegistry {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         await runHandler();
-        return;
+        return ctx.payload;
       } catch (error) {
         const isRetryable = entry.retry?.retryable
           ? entry.retry.retryable(error)
@@ -417,5 +427,7 @@ export class HandlerRegistry {
         }
       }
     }
+
+    return ctx.payload;
   }
 }

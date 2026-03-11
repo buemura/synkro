@@ -6,6 +6,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-03-11
+
+### Fixed
+
+- **Workflow payload propagation** — `setPayload()` changes inside workflow step handlers now correctly flow to subsequent steps. Previously, `HandlerRegistry` published the original event payload in the completion event instead of the updated `ctx.payload`, causing `setPayload` mutations to be lost between workflow steps.
+
 ## [0.18.0] - 2026-03-10
 
 ### Added

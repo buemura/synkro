@@ -932,4 +932,39 @@ describe("HandlerRegistry", () => {
       vi.useRealTimers();
     });
   });
+
+  describe("setPayload propagation", () => {
+    it("should propagate setPayload changes to the completion event", async () => {
+      const handler = vi.fn(async (ctx) => {
+        ctx.setPayload({ added: "value", extra: 42 });
+      });
+
+      registry.register("test:event", handler);
+
+      const subscribeCall = vi.mocked(mockRedis.subscribeToChannel).mock
+        .calls[0]!;
+      const messageCallback = subscribeCall[1] as (message: string) => void;
+
+      messageCallback(
+        JSON.stringify({
+          requestId: "req-setpayload",
+          payload: { original: true },
+        }),
+      );
+      await flushPromises();
+
+      const publishCalls = vi.mocked(mockRedis.publishMessage).mock.calls;
+      const completionCall = publishCalls.find(
+        (c) => c[0] === "event:test:event:completed",
+      );
+      expect(completionCall).toBeDefined();
+
+      const published = JSON.parse(completionCall![1] as string);
+      expect(published.payload).toEqual({
+        original: true,
+        added: "value",
+        extra: 42,
+      });
+    });
+  });
 });
