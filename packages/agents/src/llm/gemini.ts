@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ModelProvider } from "./provider.js";
 import type { Message, ModelOptions, ModelResponse, ToolDefinition } from "./types.js";
 
@@ -104,7 +105,7 @@ export class GeminiProvider implements ModelProvider {
         content += part.text;
       } else if ("functionCall" in part) {
         toolCalls.push({
-          id: `gemini-${crypto.randomUUID()}`,
+          id: `gemini-${randomUUID()}`,
           name: part.functionCall.name,
           arguments: JSON.stringify(part.functionCall.args),
         });

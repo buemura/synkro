@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { HandlerCtx, HandlerFunction } from "@synkro/core";
 import type { ModelProvider } from "./llm/provider.js";
 import type { Message, ModelOptions, TokenUsage, ToolDefinition } from "./llm/types.js";
@@ -44,7 +45,7 @@ export class Agent {
   }
 
   async run(input: string, options?: AgentRunOptions): Promise<AgentRunResult> {
-    const runId = options?.requestId ?? crypto.randomUUID();
+    const runId = options?.requestId ?? randomUUID();
     const allToolResults: ToolResult[] = [];
     const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
