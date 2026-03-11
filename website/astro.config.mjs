@@ -160,6 +160,10 @@ export default defineConfig({
           label: "Architecture",
           autogenerate: { directory: "architecture" },
         },
+        {
+          label: "Release Notes",
+          link: "/release-notes/",
+        },
       ],
     }),
     sitemap(),
