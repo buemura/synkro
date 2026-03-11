@@ -1,0 +1,50 @@
+{
+  "name": "@synkro/agents",
+  "version": "0.1.0",
+  "description": "AI agent orchestration for @synkro/core — LLM-powered agents with tools, memory, and multi-agent patterns",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "llm",
+    "orchestration",
+    "workflow",
+    "synkro"
+  ],
+  "author": "buemura",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/buemura/synkro.git",
+    "directory": "packages/agents"
+  },
+  "homepage": "https://github.com/buemura/synkro",
+  "peerDependencies": {
+    "@synkro/core": "^0.18.0"
+  },
+  "devDependencies": {
+    "@synkro/core": "workspace:*",
+    "@types/node": "^25.3.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
