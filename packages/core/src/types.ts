@@ -29,6 +29,7 @@ export type SynkroWorkflowStep = {
   onSuccess?: string;
   onFailure?: string;
   timeoutMs?: number;
+  dependsOn?: string[];
 };
 
 export type SynkroWorkflow = {
@@ -99,6 +100,7 @@ export type WorkflowStepInfo = {
   onSuccess?: string;
   onFailure?: string;
   timeoutMs?: number;
+  dependsOn?: string[];
 };
 
 export type WorkflowInfo = {
@@ -151,7 +153,7 @@ export type WorkflowGraphNode = {
 export type WorkflowGraphEdge = {
   from: string;
   to: string;
-  label: "next" | "onSuccess" | "onFailure";
+  label: "next" | "onSuccess" | "onFailure" | "dependsOn";
 };
 
 export type WorkflowGraph = {

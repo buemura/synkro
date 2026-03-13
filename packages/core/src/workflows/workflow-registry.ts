@@ -16,6 +16,9 @@ export type WorkflowState = {
   workflowName: string;
   currentStep: number;
   status: "running" | "completed" | "failed" | "cancelled";
+  completedSteps?: string[];
+  activeSteps?: string[];
+  parallel?: boolean;
 };
 
 const DEFAULT_LOCK_TTL = 300;
@@ -25,6 +28,7 @@ const DEFAULT_STATE_TTL = 86400;
 export class WorkflowRegistry {
   private workflows = new Map<string, SynkroWorkflow>();
   private branchTargets = new Map<string, Set<string>>();
+  private parallelWorkflows = new Set<string>();
   private processingLocks = new Set<string>();
   private lockQueues = new Map<string, Promise<void>>();
   private activeTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -68,6 +72,10 @@ export class WorkflowRegistry {
     return this.processingLocks.size;
   }
 
+  private isParallel(workflowName: string): boolean {
+    return this.parallelWorkflows.has(workflowName);
+  }
+
   getWorkflowGraph(workflowName: string): WorkflowGraph | null {
     const workflow = this.workflows.get(workflowName);
     if (!workflow) return null;
@@ -94,25 +102,42 @@ export class WorkflowRegistry {
     }));
 
     const edges: WorkflowGraphEdge[] = [];
-    const targets = this.branchTargets.get(workflow.name);
 
-    for (let i = 0; i < workflow.steps.length; i++) {
-      const step = workflow.steps[i]!;
-
-      if (step.onSuccess) {
-        edges.push({ from: step.type, to: step.onSuccess, label: "onSuccess" });
+    if (this.isParallel(workflow.name)) {
+      for (const step of workflow.steps) {
+        if (step.dependsOn) {
+          for (const dep of step.dependsOn) {
+            edges.push({ from: dep, to: step.type, label: "dependsOn" });
+          }
+        }
+        if (step.onSuccess) {
+          edges.push({ from: step.type, to: step.onSuccess, label: "onSuccess" });
+        }
+        if (step.onFailure) {
+          edges.push({ from: step.type, to: step.onFailure, label: "onFailure" });
+        }
       }
+    } else {
+      const targets = this.branchTargets.get(workflow.name);
 
-      if (step.onFailure) {
-        edges.push({ from: step.type, to: step.onFailure, label: "onFailure" });
-      }
+      for (let i = 0; i < workflow.steps.length; i++) {
+        const step = workflow.steps[i]!;
 
-      // Sequential "next" edge — same logic as findNextStep (skip branch targets)
-      if (!step.onSuccess) {
-        for (let j = i + 1; j < workflow.steps.length; j++) {
-          if (!targets?.has(workflow.steps[j]!.type)) {
-            edges.push({ from: step.type, to: workflow.steps[j]!.type, label: "next" });
-            break;
+        if (step.onSuccess) {
+          edges.push({ from: step.type, to: step.onSuccess, label: "onSuccess" });
+        }
+
+        if (step.onFailure) {
+          edges.push({ from: step.type, to: step.onFailure, label: "onFailure" });
+        }
+
+        // Sequential "next" edge — same logic as findNextStep (skip branch targets)
+        if (!step.onSuccess) {
+          for (let j = i + 1; j < workflow.steps.length; j++) {
+            if (!targets?.has(workflow.steps[j]!.type)) {
+              edges.push({ from: step.type, to: workflow.steps[j]!.type, label: "next" });
+              break;
+            }
           }
         }
       }
@@ -130,6 +155,7 @@ export class WorkflowRegistry {
         ...(s.onSuccess && { onSuccess: s.onSuccess }),
         ...(s.onFailure && { onFailure: s.onFailure }),
         ...(s.timeoutMs && { timeoutMs: s.timeoutMs }),
+        ...(s.dependsOn && { dependsOn: s.dependsOn }),
       })),
       ...(w.onComplete && { onComplete: w.onComplete }),
       ...(w.onSuccess && { onSuccess: w.onSuccess }),
@@ -150,6 +176,10 @@ export class WorkflowRegistry {
         if (step.onFailure) targets.add(step.onFailure);
       }
       this.branchTargets.set(workflow.name, targets);
+
+      if (workflow.steps.some((s) => s.dependsOn && s.dependsOn.length > 0)) {
+        this.parallelWorkflows.add(workflow.name);
+      }
 
       for (let i = 0; i < workflow.steps.length; i++) {
         const step = workflow.steps[i]!;
@@ -201,6 +231,11 @@ export class WorkflowRegistry {
       );
     }
 
+    if (this.isParallel(workflowName)) {
+      await this.startParallelWorkflow(workflow, requestId, payload);
+      return;
+    }
+
     const state: WorkflowState = {
       workflowName,
       currentStep: 0,
@@ -218,6 +253,38 @@ export class WorkflowRegistry {
 
     await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
     this.startStepTimer(workflow, 0, requestId, payload);
+  }
+
+  private async startParallelWorkflow(
+    workflow: SynkroWorkflow,
+    requestId: string,
+    payload: unknown,
+  ): Promise<void> {
+    const rootSteps = workflow.steps.filter(
+      (s) => !s.dependsOn || s.dependsOn.length === 0,
+    );
+
+    const state: WorkflowState = {
+      workflowName: workflow.name,
+      currentStep: -1,
+      status: "running",
+      parallel: true,
+      completedSteps: [],
+      activeSteps: rootSteps.map((s) => s.type),
+    };
+    await this.saveState(requestId, state);
+
+    this.logger.debug("[WorkflowRegistry] Starting parallel workflow", {
+      workflowName: workflow.name,
+      requestId,
+      rootSteps: rootSteps.map((s) => s.type),
+    });
+
+    for (const step of rootSteps) {
+      const channel = this.stepChannel(workflow.name, step.type);
+      await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
+      this.startStepTimer(workflow, this.findStepIndex(workflow, step.type), requestId, payload);
+    }
   }
 
   private subscribeToWorkflowEvents(workflow: SynkroWorkflow): void {
@@ -261,6 +328,11 @@ export class WorkflowRegistry {
 
       const state = await this.getState(requestId, workflow.name);
       if (!state || state.workflowName !== workflow.name || state.status !== "running") {
+        return;
+      }
+
+      if (state.parallel) {
+        await this.handleParallelStepCompletion(workflow, stepIndex, requestId, payload, state);
         return;
       }
 
@@ -314,6 +386,66 @@ export class WorkflowRegistry {
     });
   }
 
+  private async handleParallelStepCompletion(
+    workflow: SynkroWorkflow,
+    stepIndex: number,
+    requestId: string,
+    payload: unknown,
+    state: WorkflowState,
+  ): Promise<void> {
+    const stepType = workflow.steps[stepIndex]!.type;
+
+    if (state.completedSteps!.includes(stepType)) return;
+
+    state.completedSteps!.push(stepType);
+    state.activeSteps = state.activeSteps!.filter((s) => s !== stepType);
+
+    const currentStep = workflow.steps[stepIndex]!;
+    if (currentStep.onSuccess) {
+      const targetIndex = this.findStepIndex(workflow, currentStep.onSuccess);
+      if (targetIndex !== -1) {
+        state.activeSteps!.push(currentStep.onSuccess);
+        await this.saveState(requestId, state);
+        const channel = this.stepChannel(workflow.name, currentStep.onSuccess);
+        await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
+        this.startStepTimer(workflow, targetIndex, requestId, payload);
+        return;
+      }
+    }
+
+    const unblocked = workflow.steps.filter((step) => {
+      if (!step.dependsOn || step.dependsOn.length === 0) return false;
+      if (state.completedSteps!.includes(step.type)) return false;
+      if (state.activeSteps!.includes(step.type)) return false;
+      return step.dependsOn.every((dep) => state.completedSteps!.includes(dep));
+    });
+
+    for (const step of unblocked) {
+      state.activeSteps!.push(step.type);
+    }
+
+    if (state.activeSteps!.length === 0 && unblocked.length === 0) {
+      state.status = "completed";
+      this.clearAllTimers(requestId, workflow.name, workflow.steps.length);
+      await this.saveState(requestId, state);
+      this.logger.debug("[WorkflowRegistry] Parallel workflow completed", {
+        workflowName: workflow.name,
+        requestId,
+      });
+      await this.triggerNextWorkflows(workflow, "completed", requestId, payload);
+      return;
+    }
+
+    await this.saveState(requestId, state);
+
+    for (const step of unblocked) {
+      const idx = this.findStepIndex(workflow, step.type);
+      const channel = this.stepChannel(workflow.name, step.type);
+      await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
+      this.startStepTimer(workflow, idx, requestId, payload);
+    }
+  }
+
   private async handleStepFailure(
     workflow: SynkroWorkflow,
     stepIndex: number,
@@ -326,6 +458,11 @@ export class WorkflowRegistry {
 
       const state = await this.getState(requestId, workflow.name);
       if (!state || state.workflowName !== workflow.name || state.status !== "running") {
+        return;
+      }
+
+      if (state.parallel) {
+        await this.handleParallelStepFailure(workflow, stepIndex, requestId, payload, state);
         return;
       }
 
@@ -365,6 +502,39 @@ export class WorkflowRegistry {
       });
       await this.triggerNextWorkflows(workflow, "failed", requestId, payload);
     });
+  }
+
+  private async handleParallelStepFailure(
+    workflow: SynkroWorkflow,
+    stepIndex: number,
+    requestId: string,
+    payload: unknown,
+    state: WorkflowState,
+  ): Promise<void> {
+    const currentStep = workflow.steps[stepIndex]!;
+
+    if (currentStep.onFailure) {
+      const targetIndex = this.findStepIndex(workflow, currentStep.onFailure);
+      if (targetIndex !== -1) {
+        state.activeSteps = state.activeSteps!.filter((s) => s !== currentStep.type);
+        state.activeSteps!.push(currentStep.onFailure);
+        await this.saveState(requestId, state);
+        const channel = this.stepChannel(workflow.name, currentStep.onFailure);
+        await this.redis.publishMessage(channel, JSON.stringify({ requestId, payload }));
+        this.startStepTimer(workflow, targetIndex, requestId, payload);
+        return;
+      }
+    }
+
+    this.clearAllTimers(requestId, workflow.name, workflow.steps.length);
+    state.status = "failed";
+    await this.saveState(requestId, state);
+    this.logger.error("[WorkflowRegistry] Parallel workflow failed", {
+      workflowName: workflow.name,
+      requestId,
+      failedStep: currentStep.type,
+    });
+    await this.triggerNextWorkflows(workflow, "failed", requestId, payload);
   }
 
   private async routeToStep(
@@ -537,6 +707,66 @@ export class WorkflowRegistry {
         );
       }
       stepTypes.add(step.type);
+    }
+
+    for (const step of workflow.steps) {
+      if (step.dependsOn) {
+        for (const dep of step.dependsOn) {
+          if (dep === step.type) {
+            throw new Error(
+              `[WorkflowRegistry] - Workflow "${workflow.name}" step "${step.type}" cannot depend on itself`,
+            );
+          }
+          if (!stepTypes.has(dep)) {
+            throw new Error(
+              `[WorkflowRegistry] - Workflow "${workflow.name}" step "${step.type}" depends on unknown step "${dep}"`,
+            );
+          }
+        }
+      }
+    }
+
+    if (workflow.steps.some((s) => s.dependsOn && s.dependsOn.length > 0)) {
+      this.detectCycles(workflow);
+    }
+  }
+
+  private detectCycles(workflow: SynkroWorkflow): void {
+    const inDegree = new Map<string, number>();
+    const dependents = new Map<string, string[]>();
+
+    for (const step of workflow.steps) {
+      inDegree.set(step.type, step.dependsOn?.length ?? 0);
+      dependents.set(step.type, []);
+    }
+
+    for (const step of workflow.steps) {
+      if (step.dependsOn) {
+        for (const dep of step.dependsOn) {
+          dependents.get(dep)!.push(step.type);
+        }
+      }
+    }
+
+    const queue = [...inDegree.entries()]
+      .filter(([, deg]) => deg === 0)
+      .map(([type]) => type);
+    let visited = 0;
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      visited++;
+      for (const dependent of dependents.get(current) ?? []) {
+        const newDeg = inDegree.get(dependent)! - 1;
+        inDegree.set(dependent, newDeg);
+        if (newDeg === 0) queue.push(dependent);
+      }
+    }
+
+    if (visited !== workflow.steps.length) {
+      throw new Error(
+        `[WorkflowRegistry] - Workflow "${workflow.name}" has a dependency cycle`,
+      );
     }
   }
 

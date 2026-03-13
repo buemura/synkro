@@ -6,6 +6,7 @@ Lightweight workflow and state machine orchestrator. Define event-driven workflo
 
 - **Standalone Events** — Simple pub/sub event handlers
 - **Sequential Workflows** — Multi-step workflows that execute in order, with state persistence
+- **Parallel Workflows** — Run independent steps concurrently with `dependsOn` dependency tracking
 - **Conditional Routing** — Branch to different steps based on handler success or failure
 - **Workflow Chaining** — Trigger follow-up workflows on completion, success, or failure
 - **Retry Support** — Configurable retry logic per step
@@ -164,6 +165,27 @@ Steps referenced by `onSuccess`/`onFailure` are treated as branch targets. When 
 ```
 
 Steps without `onSuccess`/`onFailure` advance sequentially as before.
+
+### Parallel Execution
+
+Use `dependsOn` to run steps concurrently. Steps without `dependsOn` start immediately in parallel; dependent steps wait for all their dependencies to complete.
+
+```ts
+{
+  name: "BuildAndDeploy",
+  steps: [
+    { type: "LintCode", handler: lintHandler },
+    { type: "RunTests", handler: testHandler },
+    {
+      type: "Deploy",
+      handler: deployHandler,
+      dependsOn: ["LintCode", "RunTests"], // waits for both to finish
+    },
+  ],
+}
+```
+
+Workflows without any `dependsOn` fields continue to execute sequentially as before. When a parallel step fails (and has no `onFailure`), the workflow fails immediately. Dependency cycles and invalid references are detected at registration time.
 
 ### Workflow Chaining
 
@@ -496,6 +518,7 @@ type SynkroWorkflowStep = {
   onSuccess?: string;
   onFailure?: string;
   timeoutMs?: number; // overrides workflow-level timeout
+  dependsOn?: string[]; // run after all listed steps complete
 };
 
 type HandlerCtx<T = unknown> = {
@@ -517,6 +540,9 @@ type WorkflowState = {
   workflowName: string;
   currentStep: number;
   status: "running" | "completed" | "failed" | "cancelled";
+  completedSteps?: string[];  // parallel workflows only
+  activeSteps?: string[];     // parallel workflows only
+  parallel?: boolean;         // true for parallel workflows
 };
 
 type MiddlewareCtx<T = unknown> = HandlerCtx<T> & {

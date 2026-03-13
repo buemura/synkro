@@ -34,6 +34,7 @@ Define standalone events and multi-step workflows with conditional branching, re
 
 - **Standalone Events** — Simple pub/sub event handlers with optional retries
 - **Sequential Workflows** — Multi-step workflows with automatic state persistence
+- **Parallel Workflows** — Run independent steps concurrently with `dependsOn` dependency tracking
 - **Conditional Branching** — Route to different steps based on success or failure
 - **Workflow Chaining** — Trigger follow-up workflows on completion, success, or failure
 - **Retry Support** — Configurable retry logic per event or workflow step

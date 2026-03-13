@@ -6,6 +6,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-03-13
+
+### Added
+
+- **Parallel workflow step execution** — Steps can now declare `dependsOn: string[]` to express dependency relationships. Steps without dependencies start in parallel; dependent steps wait for all dependencies to complete before executing. Workflows without `dependsOn` continue to use sequential execution unchanged.
+- **Dependency validation** — Registration validates `dependsOn` references exist, rejects self-dependencies, and detects cycles using topological sort.
+- **Parallel-aware state tracking** — `WorkflowState` includes `parallel`, `completedSteps`, and `activeSteps` fields for parallel workflows.
+- **Fail-fast semantics** — When a parallel step fails without `onFailure`, the entire workflow fails immediately.
+- **DAG export for parallel workflows** — `getWorkflowGraph()` generates `dependsOn` edges for parallel workflows.
+
 ## [0.18.1] - 2026-03-11
 
 ### Fixed

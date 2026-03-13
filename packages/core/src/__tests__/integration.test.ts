@@ -213,6 +213,142 @@ describe("Integration", () => {
     });
   });
 
+  // ───────────────────────────── Parallel Workflow ─────────────────────────────
+
+  describe("parallel workflow", () => {
+    it("should execute independent steps in parallel and dependent step after both complete", async () => {
+      const order: string[] = [];
+
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "parallel-pipeline",
+            steps: [
+              {
+                type: "FetchA",
+                handler: () => {
+                  order.push("FetchA");
+                },
+              },
+              {
+                type: "FetchB",
+                handler: () => {
+                  order.push("FetchB");
+                },
+              },
+              {
+                type: "Merge",
+                handler: () => {
+                  order.push("Merge");
+                },
+                dependsOn: ["FetchA", "FetchB"],
+              },
+            ],
+          },
+        ],
+      });
+
+      const requestId = await synkro.publish("parallel-pipeline", { source: "api" });
+      await settle();
+
+      // FetchA and FetchB should have run (order may vary), then Merge
+      expect(order).toContain("FetchA");
+      expect(order).toContain("FetchB");
+      expect(order[2]).toBe("Merge");
+
+      const state = await synkro.getWorkflowState(requestId, "parallel-pipeline");
+      expect(state?.status).toBe("completed");
+    });
+
+    it("should complete parallel workflow and trigger chained workflow", async () => {
+      const order: string[] = [];
+
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "parallel-main",
+            steps: [
+              { type: "A", handler: () => { order.push("A"); } },
+              { type: "B", handler: () => { order.push("B"); } },
+              { type: "C", handler: () => { order.push("C"); }, dependsOn: ["A", "B"] },
+            ],
+            onComplete: "cleanup",
+          },
+          {
+            name: "cleanup",
+            steps: [
+              { type: "Cleanup", handler: () => { order.push("Cleanup"); } },
+            ],
+          },
+        ],
+      });
+
+      await synkro.publish("parallel-main", {});
+      await settle();
+
+      expect(order).toContain("A");
+      expect(order).toContain("B");
+      expect(order).toContain("C");
+      expect(order).toContain("Cleanup");
+      // C must come after A and B, Cleanup must come after C
+      expect(order.indexOf("C")).toBeGreaterThan(order.indexOf("A"));
+      expect(order.indexOf("C")).toBeGreaterThan(order.indexOf("B"));
+      expect(order.indexOf("Cleanup")).toBeGreaterThan(order.indexOf("C"));
+    });
+
+    it("should fail-fast when a parallel step fails", async () => {
+      const order: string[] = [];
+
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "parallel-fail",
+            steps: [
+              {
+                type: "A",
+                handler: () => {
+                  order.push("A");
+                  throw new Error("A failed");
+                },
+              },
+              { type: "B", handler: () => { order.push("B"); } },
+              { type: "C", handler: () => { order.push("C"); }, dependsOn: ["A", "B"] },
+            ],
+          },
+        ],
+      });
+
+      const requestId = await synkro.publish("parallel-fail", {});
+      await settle();
+
+      // C should never execute since A failed
+      expect(order).not.toContain("C");
+    });
+
+    it("should generate dependsOn edges in graph for parallel workflows", async () => {
+      synkro = await startInMemory({
+        workflows: [
+          {
+            name: "par-graph",
+            steps: [
+              { type: "A", handler: () => {} },
+              { type: "B", handler: () => {} },
+              { type: "C", handler: () => {}, dependsOn: ["A", "B"] },
+            ],
+          },
+        ],
+      });
+
+      const graph = synkro.getWorkflowGraph("par-graph");
+      expect(graph).not.toBeNull();
+      expect(graph!.nodes).toHaveLength(3);
+      expect(graph!.edges).toEqual([
+        { from: "A", to: "C", label: "dependsOn" },
+        { from: "B", to: "C", label: "dependsOn" },
+      ]);
+    });
+  });
+
   // ───────────────────────────── Workflow Branching ─────────────────────────────
 
   describe("workflow branching", () => {

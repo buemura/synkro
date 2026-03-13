@@ -1470,4 +1470,557 @@ describe("WorkflowRegistry", () => {
       expect(info[0]!.steps[0]!.timeoutMs).toBe(2000);
     });
   });
+
+  describe("parallel workflow validation", () => {
+    it("should reject dependsOn referencing unknown step", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "bad-dep",
+            steps: [
+              { type: "a", handler: vi.fn() },
+              { type: "b", handler: vi.fn(), dependsOn: ["nonexistent"] },
+            ],
+          },
+        ]),
+      ).toThrow('step "b" depends on unknown step "nonexistent"');
+    });
+
+    it("should reject self-dependency", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "self-dep",
+            steps: [
+              { type: "a", handler: vi.fn(), dependsOn: ["a"] },
+            ],
+          },
+        ]),
+      ).toThrow('step "a" cannot depend on itself');
+    });
+
+    it("should reject dependency cycles", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "cycle",
+            steps: [
+              { type: "a", handler: vi.fn(), dependsOn: ["b"] },
+              { type: "b", handler: vi.fn(), dependsOn: ["a"] },
+            ],
+          },
+        ]),
+      ).toThrow('Workflow "cycle" has a dependency cycle');
+    });
+
+    it("should reject three-step dependency cycle", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "cycle3",
+            steps: [
+              { type: "a", handler: vi.fn(), dependsOn: ["c"] },
+              { type: "b", handler: vi.fn(), dependsOn: ["a"] },
+              { type: "c", handler: vi.fn(), dependsOn: ["b"] },
+            ],
+          },
+        ]),
+      ).toThrow("has a dependency cycle");
+    });
+
+    it("should accept valid parallel workflow", () => {
+      expect(() =>
+        registry.registerWorkflows([
+          {
+            name: "valid-parallel",
+            steps: [
+              { type: "a", handler: vi.fn() },
+              { type: "b", handler: vi.fn() },
+              { type: "c", handler: vi.fn(), dependsOn: ["a", "b"] },
+            ],
+          },
+        ]),
+      ).not.toThrow();
+    });
+  });
+
+  describe("parallel workflow start", () => {
+    it("should publish messages for all root steps", async () => {
+      const workflow: SynkroWorkflow = {
+        name: "parallel-wf",
+        steps: [
+          { type: "a", handler: vi.fn() },
+          { type: "b", handler: vi.fn() },
+          { type: "c", handler: vi.fn(), dependsOn: ["a", "b"] },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      await registry.startWorkflow("parallel-wf", "req-1", { data: 1 });
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:parallel-wf:a",
+        JSON.stringify({ requestId: "req-1", payload: { data: 1 } }),
+      );
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:parallel-wf:b",
+        JSON.stringify({ requestId: "req-1", payload: { data: 1 } }),
+      );
+      expect(mockRedis.publishMessage).not.toHaveBeenCalledWith(
+        "workflow:parallel-wf:c",
+        expect.anything(),
+      );
+    });
+
+    it("should save initial state with parallel fields", async () => {
+      const workflow: SynkroWorkflow = {
+        name: "parallel-wf",
+        steps: [
+          { type: "a", handler: vi.fn() },
+          { type: "b", handler: vi.fn() },
+          { type: "c", handler: vi.fn(), dependsOn: ["a", "b"] },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      await registry.startWorkflow("parallel-wf", "req-1", {});
+
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1:parallel-wf",
+        JSON.stringify({
+          workflowName: "parallel-wf",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: [],
+          activeSteps: ["a", "b"],
+        }),
+        86400,
+      );
+    });
+  });
+
+  describe("parallel step completion", () => {
+    function setupParallelWorkflow() {
+      const workflow: SynkroWorkflow = {
+        name: "parallel-wf",
+        steps: [
+          { type: "a", handler: vi.fn() },
+          { type: "b", handler: vi.fn() },
+          { type: "c", handler: vi.fn(), dependsOn: ["a", "b"] },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const getCallback = (channel: string) => {
+        const call = subscribeCalls.find((c) => c[0] === channel);
+        return call![1] as (message: string) => void;
+      };
+
+      return {
+        workflow,
+        completionA: getCallback("event:workflow:parallel-wf:a:completed"),
+        completionB: getCallback("event:workflow:parallel-wf:b:completed"),
+        completionC: getCallback("event:workflow:parallel-wf:c:completed"),
+        failureA: getCallback("event:workflow:parallel-wf:a:failed"),
+        failureB: getCallback("event:workflow:parallel-wf:b:failed"),
+      };
+    }
+
+    it("should not start dependent step when only one dependency completes", async () => {
+      const { completionA } = setupParallelWorkflow();
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "parallel-wf",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: [],
+          activeSteps: ["a", "b"],
+        }),
+      );
+
+      completionA(JSON.stringify({ requestId: "req-1", payload: {} }));
+      await flushPromises();
+
+      // Should save state with "a" completed, but NOT publish to "c"
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1:parallel-wf",
+        JSON.stringify({
+          workflowName: "parallel-wf",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: ["a"],
+          activeSteps: ["b"],
+        }),
+        86400,
+      );
+
+      expect(mockRedis.publishMessage).not.toHaveBeenCalledWith(
+        "workflow:parallel-wf:c",
+        expect.anything(),
+      );
+    });
+
+    it("should start dependent step when all dependencies complete", async () => {
+      const { completionB } = setupParallelWorkflow();
+
+      // State: "a" already completed, "b" still active
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "parallel-wf",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: ["a"],
+          activeSteps: ["b"],
+        }),
+      );
+
+      completionB(JSON.stringify({ requestId: "req-1", payload: { result: "ok" } }));
+      await flushPromises();
+
+      // Should publish to "c" now that both "a" and "b" are done
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:parallel-wf:c",
+        JSON.stringify({ requestId: "req-1", payload: { result: "ok" } }),
+      );
+
+      // State should show "c" as active
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1:parallel-wf",
+        JSON.stringify({
+          workflowName: "parallel-wf",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: ["a", "b"],
+          activeSteps: ["c"],
+        }),
+        86400,
+      );
+    });
+
+    it("should mark workflow as completed when last step finishes", async () => {
+      const { completionC } = setupParallelWorkflow();
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "parallel-wf",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: ["a", "b"],
+          activeSteps: ["c"],
+        }),
+      );
+
+      completionC(JSON.stringify({ requestId: "req-1", payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1:parallel-wf",
+        JSON.stringify({
+          workflowName: "parallel-wf",
+          currentStep: -1,
+          status: "completed",
+          parallel: true,
+          completedSteps: ["a", "b", "c"],
+          activeSteps: [],
+        }),
+        86400,
+      );
+    });
+
+    it("should handle diamond dependency: A→B, A→C, B+C→D", async () => {
+      const workflow: SynkroWorkflow = {
+        name: "diamond",
+        steps: [
+          { type: "a", handler: vi.fn() },
+          { type: "b", handler: vi.fn(), dependsOn: ["a"] },
+          { type: "c", handler: vi.fn(), dependsOn: ["a"] },
+          { type: "d", handler: vi.fn(), dependsOn: ["b", "c"] },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionA = subscribeCalls.find(
+        (c) => c[0] === "event:workflow:diamond:a:completed",
+      )![1] as (msg: string) => void;
+      const completionB = subscribeCalls.find(
+        (c) => c[0] === "event:workflow:diamond:b:completed",
+      )![1] as (msg: string) => void;
+      const completionC = subscribeCalls.find(
+        (c) => c[0] === "event:workflow:diamond:c:completed",
+      )![1] as (msg: string) => void;
+
+      // A completes → should unblock B and C
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "diamond",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: [],
+          activeSteps: ["a"],
+        }),
+      );
+
+      completionA(JSON.stringify({ requestId: "req-1", payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:diamond:b",
+        expect.anything(),
+      );
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:diamond:c",
+        expect.anything(),
+      );
+      expect(mockRedis.publishMessage).not.toHaveBeenCalledWith(
+        "workflow:diamond:d",
+        expect.anything(),
+      );
+
+      // B completes → D should NOT start yet (C still active)
+      vi.mocked(mockRedis.getCache).mockReset();
+      vi.mocked(mockRedis.setCacheIfNotExists).mockResolvedValue(true);
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "diamond",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: ["a"],
+          activeSteps: ["b", "c"],
+        }),
+      );
+
+      vi.mocked(mockRedis.publishMessage).mockClear();
+      completionB(JSON.stringify({ requestId: "req-1", payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).not.toHaveBeenCalledWith(
+        "workflow:diamond:d",
+        expect.anything(),
+      );
+
+      // C completes → D should now start
+      vi.mocked(mockRedis.getCache).mockReset();
+      vi.mocked(mockRedis.setCacheIfNotExists).mockResolvedValue(true);
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "diamond",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: ["a", "b"],
+          activeSteps: ["c"],
+        }),
+      );
+
+      completionC(JSON.stringify({ requestId: "req-1", payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:diamond:d",
+        expect.anything(),
+      );
+    });
+  });
+
+  describe("parallel step failure", () => {
+    it("should fail-fast when parallel step fails without onFailure", async () => {
+      const workflow: SynkroWorkflow = {
+        name: "parallel-fail",
+        steps: [
+          { type: "a", handler: vi.fn() },
+          { type: "b", handler: vi.fn() },
+          { type: "c", handler: vi.fn(), dependsOn: ["a", "b"] },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const failureA = subscribeCalls.find(
+        (c) => c[0] === "event:workflow:parallel-fail:a:failed",
+      )![1] as (msg: string) => void;
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "parallel-fail",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: [],
+          activeSteps: ["a", "b"],
+        }),
+      );
+
+      failureA(JSON.stringify({ requestId: "req-1", payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1:parallel-fail",
+        JSON.stringify({
+          workflowName: "parallel-fail",
+          currentStep: -1,
+          status: "failed",
+          parallel: true,
+          completedSteps: [],
+          activeSteps: ["a", "b"],
+        }),
+        86400,
+      );
+    });
+
+    it("should route to onFailure step in parallel mode", async () => {
+      const workflow: SynkroWorkflow = {
+        name: "parallel-recover",
+        steps: [
+          { type: "a", handler: vi.fn(), onFailure: "recover" },
+          { type: "b", handler: vi.fn() },
+          { type: "c", handler: vi.fn(), dependsOn: ["a", "b"] },
+          { type: "recover", handler: vi.fn() },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const failureA = subscribeCalls.find(
+        (c) => c[0] === "event:workflow:parallel-recover:a:failed",
+      )![1] as (msg: string) => void;
+
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "parallel-recover",
+          currentStep: -1,
+          status: "running",
+          parallel: true,
+          completedSteps: [],
+          activeSteps: ["a", "b"],
+        }),
+      );
+
+      failureA(JSON.stringify({ requestId: "req-1", payload: {} }));
+      await flushPromises();
+
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:parallel-recover:recover",
+        JSON.stringify({ requestId: "req-1", payload: {} }),
+      );
+
+      // Workflow should NOT be failed — recovery step was invoked
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-1:parallel-recover",
+        expect.stringContaining('"status":"running"'),
+        86400,
+      );
+    });
+
+    it("should not process completion after workflow is already failed", async () => {
+      const workflow: SynkroWorkflow = {
+        name: "parallel-fail2",
+        steps: [
+          { type: "a", handler: vi.fn() },
+          { type: "b", handler: vi.fn() },
+          { type: "c", handler: vi.fn(), dependsOn: ["a", "b"] },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      const subscribeCalls = vi.mocked(mockRedis.subscribeToChannel).mock.calls;
+      const completionB = subscribeCalls.find(
+        (c) => c[0] === "event:workflow:parallel-fail2:b:completed",
+      )![1] as (msg: string) => void;
+
+      // Workflow already failed
+      vi.mocked(mockRedis.getCache).mockResolvedValue(
+        JSON.stringify({
+          workflowName: "parallel-fail2",
+          currentStep: -1,
+          status: "failed",
+          parallel: true,
+          completedSteps: [],
+          activeSteps: ["b"],
+        }),
+      );
+
+      vi.mocked(mockRedis.publishMessage).mockClear();
+      completionB(JSON.stringify({ requestId: "req-1", payload: {} }));
+      await flushPromises();
+
+      // Should not publish any further messages
+      expect(mockRedis.publishMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("parallel workflow graph", () => {
+    it("should generate dependsOn edges for parallel workflows", () => {
+      const workflow: SynkroWorkflow = {
+        name: "parallel-graph",
+        steps: [
+          { type: "a", handler: vi.fn() },
+          { type: "b", handler: vi.fn() },
+          { type: "c", handler: vi.fn(), dependsOn: ["a", "b"] },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      const graph = registry.getWorkflowGraph("parallel-graph");
+
+      expect(graph).not.toBeNull();
+      expect(graph!.nodes).toHaveLength(3);
+      expect(graph!.edges).toEqual([
+        { from: "a", to: "c", label: "dependsOn" },
+        { from: "b", to: "c", label: "dependsOn" },
+      ]);
+    });
+
+    it("should include dependsOn in introspection", () => {
+      const workflow: SynkroWorkflow = {
+        name: "parallel-introspect",
+        steps: [
+          { type: "a", handler: vi.fn() },
+          { type: "b", handler: vi.fn(), dependsOn: ["a"] },
+        ],
+      };
+      registry.registerWorkflows([workflow]);
+
+      const info = registry.getRegisteredWorkflows();
+      const wf = info.find((w) => w.name === "parallel-introspect")!;
+      expect(wf.steps[1]!.dependsOn).toEqual(["a"]);
+    });
+  });
+
+  describe("backward compatibility", () => {
+    it("should keep sequential behavior when no dependsOn is used", async () => {
+      const workflow = createTestWorkflow();
+      registry.registerWorkflows([workflow]);
+
+      await registry.startWorkflow("order-processing", "req-compat", { orderId: 1 });
+
+      // Should save state with currentStep: 0, no parallel fields
+      expect(mockRedis.setCache).toHaveBeenCalledWith(
+        "workflow:state:req-compat:order-processing",
+        JSON.stringify({
+          workflowName: "order-processing",
+          currentStep: 0,
+          status: "running",
+        }),
+        86400,
+      );
+
+      // Should only publish to first step
+      expect(mockRedis.publishMessage).toHaveBeenCalledTimes(1);
+      expect(mockRedis.publishMessage).toHaveBeenCalledWith(
+        "workflow:order-processing:validate",
+        expect.anything(),
+      );
+    });
+  });
 });
