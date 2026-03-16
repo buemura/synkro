@@ -1,6 +1,8 @@
 import {
   createAgent,
   createAgentRegistry,
+  createRouter,
+  createSupervisor,
   OpenAIProvider,
 } from "@synkro/agents";
 import {
@@ -115,3 +117,72 @@ export const coordinatorAgent = createAgent({
   registry,
 });
 registry.register(coordinatorAgent);
+
+// ---------------------------------------------------------------------------
+// v0.3.0 — Observability: agent with emitEvents: true (D4)
+//
+// When called via asHandler() or run() with a live synkroCtx, this agent
+// publishes lifecycle events to the Synkro event system:
+//   agent:run:started, agent:run:completed, agent:tool:executed
+// ---------------------------------------------------------------------------
+
+export const observableAgent = createAgent({
+  name: "observable-support",
+  description: "Support agent with lifecycle observability enabled",
+  systemPrompt:
+    "You are a customer support agent. Help customers find their orders using the search_orders tool. Be friendly and concise.",
+  provider,
+  model: { model: "gpt-4o-mini", temperature: 0.5 },
+  tools: [searchOrders],
+  maxIterations: 5,
+  emitEvents: true,
+});
+
+// ---------------------------------------------------------------------------
+// v0.3.0 — Dynamic Router: LLM-based N-path branching (D5)
+//
+// The router asks the LLM to classify the incoming message and publishes
+// the selected route name as an event (billing / technical / general).
+// Downstream handlers subscribe to those events independently.
+// ---------------------------------------------------------------------------
+
+export const ticketRouter = createRouter({
+  name: "ticket-router",
+  provider,
+  model: { model: "gpt-4o-mini" },
+  routes: [
+    {
+      name: "billing",
+      description: "Billing issues: charges, refunds, duplicate payments, invoices",
+    },
+    {
+      name: "technical",
+      description: "Technical issues: errors, bugs, app crashes, outages",
+    },
+    {
+      name: "general",
+      description: "General questions, feedback, feature requests",
+    },
+  ],
+  fallback: "general",
+});
+
+// ---------------------------------------------------------------------------
+// v0.3.0 — Supervisor/Worker: multi-agent collaboration (D6)
+//
+// The supervisor delegates tasks to worker agents and iterates until done.
+// No registry needed — workers are passed directly to createSupervisor().
+// ---------------------------------------------------------------------------
+
+export const researchSupervisor = createSupervisor({
+  name: "research-supervisor",
+  systemPrompt:
+    "You are a research supervisor. Break down the user's request and delegate each part to the right specialist:\n" +
+    "- Weather questions → weather-assistant\n" +
+    "- Math calculations → math-assistant\n" +
+    "Once all parts are done, synthesize the results into a final answer.",
+  provider,
+  model: { model: "gpt-4o-mini", temperature: 0 },
+  workers: [weatherAgent, mathAgent],
+  maxRounds: 6,
+});

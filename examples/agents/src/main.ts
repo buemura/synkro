@@ -3,14 +3,17 @@ import { Synkro } from "@synkro/core";
 import {
   coordinatorAgent,
   mathAgent,
+  observableAgent,
   registry,
+  researchSupervisor,
   supportAgent,
+  ticketRouter,
   weatherAgent,
 } from "./agents.js";
 import { workflows } from "./workflows.js";
 
 // ---------------------------------------------------------------------------
-// 1. Standalone agents (same as v0.1)
+// 1. Standalone agents (v0.1)
 // ---------------------------------------------------------------------------
 
 async function runStandaloneExamples() {
@@ -42,7 +45,7 @@ async function runStandaloneExamples() {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Agent delegation via registry (v0.2 — NEW)
+// 2. Agent delegation via registry (v0.2)
 // ---------------------------------------------------------------------------
 
 async function runDelegationExample() {
@@ -53,7 +56,6 @@ async function runDelegationExample() {
     `   Agents: ${registry.list().map((a: { name: string }) => a.name).join(", ")}\n`,
   );
 
-  // The coordinator agent delegates to specialists using ctx.delegate()
   console.log(">> Coordinator: routing weather question to specialist");
   const result = await coordinatorAgent.run(
     "What's the weather in New York?",
@@ -65,7 +67,112 @@ async function runDelegationExample() {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Synkro integration — asHandler + pipelines (v0.2 — NEW)
+// 3. Observability — emitEvents: true (v0.3 — NEW)
+//
+// Agents with emitEvents: true publish lifecycle events (agent:run:started,
+// agent:run:completed, agent:tool:executed) to the Synkro event system.
+// Here we simulate that with a mock HandlerCtx to capture the events.
+// ---------------------------------------------------------------------------
+
+async function runObservabilityExample() {
+  console.log("=== Observability — emitEvents (v0.3) ===\n");
+
+  const events: Array<{ type: string; payload: unknown }> = [];
+
+  // Simulated HandlerCtx — captures events that the agent publishes
+  const mockCtx = {
+    requestId: "demo-req-001",
+    payload: { input: "Where is my order ORD-001?" },
+    publish: async (type: string, payload: unknown) => {
+      events.push({ type, payload });
+      console.log(`   [event] ${type}`);
+      return "ok";
+    },
+    setPayload: (_payload: unknown) => {},
+  };
+
+  console.log(">> Running observable-support agent with live context");
+  const handler = observableAgent.asHandler();
+  await handler(mockCtx);
+
+  console.log(`\n   Lifecycle events emitted: ${events.length}`);
+  for (const e of events) {
+    const p = e.payload as Record<string, unknown>;
+    if (e.type === "agent:tool:executed") {
+      console.log(`     • ${e.type} — tool=${p.toolName} durationMs=${p.durationMs}`);
+    } else if (e.type === "agent:run:completed") {
+      console.log(`     • ${e.type} — status=${p.status} tokens=${(p.tokenUsage as { totalTokens: number })?.totalTokens} durationMs=${p.durationMs}`);
+    } else {
+      console.log(`     • ${e.type}`);
+    }
+  }
+  console.log();
+}
+
+// ---------------------------------------------------------------------------
+// 4. Dynamic Router — createRouter() (v0.3 — NEW)
+//
+// The LLM classifies the incoming message and publishes the selected route
+// name as a Synkro event. Downstream handlers react to those route events.
+// ---------------------------------------------------------------------------
+
+async function runRouterExample() {
+  console.log("=== Dynamic Router — createRouter() (v0.3) ===\n");
+
+  const testMessages = [
+    "I was charged twice for my order, I need a refund",
+    "The app keeps crashing whenever I try to upload a file",
+    "Do you have a mobile app?",
+  ];
+
+  const handler = ticketRouter.asHandler();
+
+  for (const message of testMessages) {
+    let publishedRoute = "(none)";
+
+    const mockCtx = {
+      requestId: `req-${Date.now()}`,
+      payload: { input: message },
+      publish: async (route: string, _payload: unknown) => {
+        publishedRoute = route;
+        return "ok";
+      },
+      setPayload: (_payload: unknown) => {},
+    };
+
+    console.log(`>> Message: "${message.slice(0, 55)}..."`);
+    await handler(mockCtx);
+    console.log(`   → Routed to: ${publishedRoute}\n`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Supervisor/Worker — createSupervisor() (v0.3 — NEW)
+//
+// The supervisor agent breaks down a complex request and delegates each part
+// to a specialized worker (weather-assistant, math-assistant). It then
+// synthesizes the results into a unified answer.
+// ---------------------------------------------------------------------------
+
+async function runSupervisorExample() {
+  console.log("=== Supervisor/Worker — createSupervisor() (v0.3) ===\n");
+
+  console.log(">> Asking supervisor a multi-part question:");
+  const question =
+    "What's the weather in London? Also, what is 144 divided by 12?";
+  console.log(`   "${question}"\n`);
+
+  const result = await researchSupervisor.run(question);
+
+  console.log(`   Status: ${result.status}`);
+  console.log(`   Worker delegations: ${result.toolCalls.length}`);
+  console.log(`   Total tokens: ${result.tokenUsage.totalTokens}`);
+  console.log(`   Output: ${result.output}`);
+  console.log();
+}
+
+// ---------------------------------------------------------------------------
+// 6. Synkro integration — asHandler + pipelines (v0.2)
 // ---------------------------------------------------------------------------
 
 async function runSynkroIntegration() {
@@ -84,7 +191,6 @@ async function runSynkroIntegration() {
     retention: { dedupTtl: 120, stateTtl: 120, metricsTtl: 120 },
   });
 
-  // --- Single event handled by an agent (live context: tools get real publish) ---
   console.log(">> Publishing support:request event");
   await synkro.publish("support:request", {
     input: "Where is my order ORD-001?",
@@ -92,7 +198,6 @@ async function runSynkroIntegration() {
   await new Promise((resolve) => setTimeout(resolve, 3000));
   console.log("   Event processed by support agent via asHandler()\n");
 
-  // --- Manual workflow: Triage -> Resolve -> Notify ---
   console.log(">> Starting SupportTicket workflow (manual wiring)\n");
   await synkro.publish("SupportTicket", {
     message: "I was charged twice for order ORD-001, please refund me",
@@ -100,7 +205,6 @@ async function runSynkroIntegration() {
   await new Promise((resolve) => setTimeout(resolve, 10_000));
   console.log();
 
-  // --- Pipeline workflow: same flow, zero manual wiring (v0.2) ---
   console.log(">> Starting SupportPipeline workflow (createPipeline)\n");
   console.log("   Agents chain automatically: triage → support → notify\n");
   await synkro.publish("SupportPipeline", {
@@ -113,14 +217,17 @@ async function runSynkroIntegration() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Main
+// Main
 // ---------------------------------------------------------------------------
 
 async function main() {
-  console.log("\n--- @synkro/agents v0.2 Examples ---\n");
+  console.log("\n--- @synkro/agents v0.3 Examples ---\n");
 
   await runStandaloneExamples();
   await runDelegationExample();
+  await runObservabilityExample();
+  await runRouterExample();
+  await runSupervisorExample();
 
   // Synkro integration requires Redis — skip if not available
   try {
